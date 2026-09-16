@@ -1,4 +1,5 @@
 import json
+import sys
 
 from src.config import COMPANIES, DEFAULT_COMPANY
 
@@ -42,18 +43,42 @@ TAG_CANDIDATES = {
 }
 
 
-def main():
-    company = COMPANIES[DEFAULT_COMPANY]
-    input_path = f"data/raw/{company['output_prefix']}_companyfacts.json"
+ANALYSIS_REQUIREMENTS = {
+    "profitability": [
+        "revenue",
+        "operating_income",
+    ],
+    "free_cash_flow": [
+        "operating_cash_flow",
+        "capital_expenditures",
+    ],
+    "working_capital_partial": [
+        "revenue",
+        "cost_of_revenue",
+        "inventory",
+        "accounts_payable",
+    ],
+    "cash_conversion_cycle_full": [
+        "revenue",
+        "cost_of_revenue",
+        "accounts_receivable",
+        "inventory",
+        "accounts_payable",
+    ],
+    "revenue_forecast": [
+        "revenue",
+    ],
+}
 
-    with open(input_path, "r") as file:
-        data = json.load(file)
 
-    us_gaap = data["facts"]["us-gaap"]
+def get_company_key():
+    if len(sys.argv) > 1:
+        return sys.argv[1]
 
-    print(f"Tag Compatibility Check: {company['name']}")
-    print("-" * 50)
+    return DEFAULT_COMPANY
 
+
+def find_available_tags(us_gaap):
     selected_tags = {}
 
     for metric, candidates in TAG_CANDIDATES.items():
@@ -66,11 +91,33 @@ def main():
 
         selected_tags[metric] = found_tag
 
-        if found_tag:
-            print(f"{metric}: FOUND -> {found_tag}")
+    return selected_tags
+
+
+def print_tag_results(selected_tags):
+    for metric, tag in selected_tags.items():
+        if tag:
+            print(f"{metric}: FOUND -> {tag}")
         else:
             print(f"{metric}: MISSING")
 
+
+def print_supported_analyses(selected_tags):
+    print()
+    print("Supported analyses:")
+    for analysis_name, required_metrics in ANALYSIS_REQUIREMENTS.items():
+        missing_metrics = [
+            metric for metric in required_metrics if not selected_tags[metric]
+        ]
+
+        if missing_metrics:
+            missing_text = ", ".join(missing_metrics)
+            print(f"- {analysis_name}: NO, missing {missing_text}")
+        else:
+            print(f"- {analysis_name}: YES")
+
+
+def print_suggested_config(selected_tags):
     print()
     print("Suggested config tag mapping:")
     print("{")
@@ -80,6 +127,31 @@ def main():
         else:
             print(f'    "{metric}": None,')
     print("}")
+
+
+def main():
+    company_key = get_company_key()
+
+    if company_key not in COMPANIES:
+        valid_keys = ", ".join(COMPANIES.keys())
+        raise ValueError(f"Unknown company '{company_key}'. Valid options: {valid_keys}")
+
+    company = COMPANIES[company_key]
+    input_path = f"data/raw/{company['output_prefix']}_companyfacts.json"
+
+    with open(input_path, "r") as file:
+        data = json.load(file)
+
+    us_gaap = data["facts"]["us-gaap"]
+
+    print(f"Tag Compatibility Check: {company['name']}")
+    print("-" * 50)
+
+    selected_tags = find_available_tags(us_gaap)
+
+    print_tag_results(selected_tags)
+    print_supported_analyses(selected_tags)
+    print_suggested_config(selected_tags)
 
 
 if __name__ == "__main__":
