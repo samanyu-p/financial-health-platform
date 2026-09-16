@@ -1,310 +1,158 @@
 import json
 import pandas as pd
 
-file_path = "data/raw/walmart_companyfacts.json"
 
-with open(file_path, "r") as file:
-    data = json.load(file)
+RAW_FILE_PATH = "data/raw/walmart_companyfacts.json"
+PROCESSED_DIR = "data/processed"
 
-revenue = data["facts"]["us-gaap"][
-    "RevenueFromContractWithCustomerExcludingAssessedTax"
-]
+ANNUAL_DAYS_MIN = 300
+ANNUAL_DAYS_MAX = 400
 
-records = revenue["units"]["USD"]
 
-df = pd.DataFrame(records)
+def keep_latest_period_filing(df, duplicate_columns):
+    df = df.copy()
+    df["filed"] = pd.to_datetime(df["filed"])
 
-# Keep only annual 10-K filings
-df = df[df["form"] == "10-K"].copy()
+    df = df.sort_values(duplicate_columns + ["filed", "accn"])
+    df = df.drop_duplicates(subset=duplicate_columns, keep="last")
 
-# Keep only records that represent a full fiscal year
-df = df[df["start"].notna() & df["end"].notna()].copy()
+    return df
 
-# Calculate the length of each reporting period
-df["start"] = pd.to_datetime(df["start"])
-df["end"] = pd.to_datetime(df["end"])
 
-df["days"] = (df["end"] - df["start"]).dt.days
+def clean_duration_metric(records, value_column_name):
+    df = pd.DataFrame(records)
 
-# Walmart's fiscal year is approximately 365 days
-df = df[(df["days"] >= 300) & (df["days"] <= 400)].copy()
+    df = df[df["form"] == "10-K"].copy()
+    df = df[df["start"].notna() & df["end"].notna()].copy()
 
-# Remove duplicate reporting periods
-df = df.drop_duplicates(subset=["start", "end"])
+    df["start"] = pd.to_datetime(df["start"])
+    df["end"] = pd.to_datetime(df["end"])
 
-# Sort chronologically
-df = df.sort_values("end")
+    df["days"] = (df["end"] - df["start"]).dt.days
+    df = df[
+        (df["days"] >= ANNUAL_DAYS_MIN)
+        & (df["days"] <= ANNUAL_DAYS_MAX)
+    ].copy()
 
-# Keep the columns we need
-df = df[["start", "end", "val"]]
+    df = keep_latest_period_filing(df, ["start", "end"])
 
-print("\nClean Walmart Revenue Data:\n")
-print(df.to_string(index=False))
+    df = df[["start", "end", "val"]]
+    df = df.rename(columns={"val": value_column_name})
+    df = df.sort_values("end")
 
-df["revenue_growth"] = df["val"].pct_change()
+    return df
 
-print("\nRevenue Growth:\n")
-print(df[["end", "val", "revenue_growth"]].to_string(index=False))
 
-output_path = "data/processed/walmart_revenue.csv"
+def clean_instant_metric(records, value_column_name):
+    df = pd.DataFrame(records)
 
-df.to_csv(output_path, index=False)
+    df = df[df["form"] == "10-K"].copy()
+    df = df[df["end"].notna()].copy()
 
-print(f"\nSaved cleaned data to {output_path}")
+    df["end"] = pd.to_datetime(df["end"])
 
-# -----------------------------
-# Accounts Receivable
-# -----------------------------
+    df = keep_latest_period_filing(df, ["end"])
 
-ar_records = data["facts"]["us-gaap"]["AccountsReceivableNet"]["units"]["USD"]
+    df = df[["end", "val"]]
+    df = df.rename(columns={"val": value_column_name})
+    df = df.sort_values("end")
 
-ar_df = pd.DataFrame(ar_records)
+    return df
 
-# Keep annual 10-K filings
-ar_df = ar_df[ar_df["form"] == "10-K"].copy()
 
-# Convert date
-ar_df["end"] = pd.to_datetime(ar_df["end"])
+def save_and_print(df, output_path, title):
+    print(f"\n{title}:\n")
+    print(df.to_string(index=False))
 
-# Keep only the date and value
-ar_df = ar_df[["end", "val"]]
+    df.to_csv(output_path, index=False)
 
-# Remove duplicate dates
-ar_df = ar_df.drop_duplicates(subset=["end"])
+    print(f"\nSaved {title.lower()} to {output_path}")
 
-# Sort chronologically
-ar_df = ar_df.sort_values("end")
 
-print("\nClean Walmart Accounts Receivable Data:\n")
-print(ar_df.to_string(index=False))
+def main():
+    with open(RAW_FILE_PATH, "r") as file:
+        data = json.load(file)
 
-# Save the cleaned data
-output_path = "data/processed/walmart_accounts_receivable.csv"
+    us_gaap = data["facts"]["us-gaap"]
 
-ar_df.to_csv(output_path, index=False)
+    revenue = clean_duration_metric(
+        us_gaap["RevenueFromContractWithCustomerExcludingAssessedTax"][
+            "units"
+        ]["USD"],
+        "revenue",
+    )
+    revenue["revenue_growth"] = revenue["revenue"].pct_change()
 
-print(f"\nSaved Accounts Receivable data to {output_path}")
+    print("\nClean Walmart Revenue Data:\n")
+    print(revenue[["start", "end", "revenue"]].to_string(index=False))
 
-# -----------------------------
-# Inventory
-# -----------------------------
+    print("\nRevenue Growth:\n")
+    print(revenue[["end", "revenue", "revenue_growth"]].to_string(index=False))
 
-inventory_records = data["facts"]["us-gaap"]["InventoryNet"]["units"]["USD"]
+    revenue_output = f"{PROCESSED_DIR}/walmart_revenue.csv"
+    revenue.to_csv(revenue_output, index=False)
+    print(f"\nSaved cleaned data to {revenue_output}")
 
-inventory_df = pd.DataFrame(inventory_records)
-
-# Keep annual 10-K filings
-inventory_df = inventory_df[inventory_df["form"] == "10-K"].copy()
-
-# Convert date
-inventory_df["end"] = pd.to_datetime(inventory_df["end"])
-
-# Keep only the date and value
-inventory_df = inventory_df[["end", "val"]]
-
-# Remove duplicate dates
-inventory_df = inventory_df.drop_duplicates(subset=["end"])
-
-# Sort chronologically
-inventory_df = inventory_df.sort_values("end")
-
-print("\nClean Walmart Inventory Data:\n")
-print(inventory_df.to_string(index=False))
-
-# Save the cleaned data
-output_path = "data/processed/walmart_inventory.csv"
-
-inventory_df.to_csv(output_path, index=False)
-
-print(f"\nSaved Inventory data to {output_path}")
-
-# -----------------------------
-# Accounts Payable
-# -----------------------------
-
-ap_records = data["facts"]["us-gaap"]["AccountsPayableCurrent"]["units"]["USD"]
-
-ap_df = pd.DataFrame(ap_records)
-
-# Keep annual 10-K filings
-ap_df = ap_df[ap_df["form"] == "10-K"].copy()
-
-# Convert date
-ap_df["end"] = pd.to_datetime(ap_df["end"])
-
-# Keep only the date and value
-ap_df = ap_df[["end", "val"]]
-
-# Remove duplicate dates
-ap_df = ap_df.drop_duplicates(subset=["end"])
-
-# Sort chronologically
-ap_df = ap_df.sort_values("end")
-
-print("\nClean Walmart Accounts Payable Data:\n")
-print(ap_df.to_string(index=False))
-
-# Save the cleaned data
-output_path = "data/processed/walmart_accounts_payable.csv"
-
-ap_df.to_csv(output_path, index=False)
-
-print(f"\nSaved Accounts Payable data to {output_path}")
-
-# -----------------------------
-# Operating Income
-# -----------------------------
-
-operating_records = data["facts"]["us-gaap"]["OperatingIncomeLoss"]["units"]["USD"]
-
-operating_df = pd.DataFrame(operating_records)
-
-# Keep annual 10-K filings
-operating_df = operating_df[operating_df["form"] == "10-K"].copy()
-
-# Keep records with start and end dates
-operating_df = operating_df[
-    operating_df["start"].notna() &
-    operating_df["end"].notna()
-].copy()
-
-# Convert dates
-operating_df["start"] = pd.to_datetime(operating_df["start"])
-operating_df["end"] = pd.to_datetime(operating_df["end"])
-
-# Calculate length of reporting period
-operating_df["days"] = (
-    operating_df["end"] - operating_df["start"]
-).dt.days
-
-# Keep approximately annual periods
-operating_df = operating_df[
-    (operating_df["days"] >= 300) &
-    (operating_df["days"] <= 400)
-].copy()
-
-# Keep only the date and value
-operating_df = operating_df[["start", "end", "val"]]
-
-# Remove duplicate reporting periods
-operating_df = operating_df.drop_duplicates(
-    subset=["start", "end"]
-)
-
-# Sort chronologically
-operating_df = operating_df.sort_values("end")
-
-print("\nClean Walmart Operating Income Data:\n")
-print(operating_df.to_string(index=False))
-
-# Save the cleaned data
-output_path = "data/processed/walmart_operating_income.csv"
-
-operating_df.to_csv(output_path, index=False)
-
-print(f"\nSaved Operating Income data to {output_path}")
-
-# ---------------------------------------------------------
-# Operating Cash Flow
-# ---------------------------------------------------------
-
-ocf_records = data["facts"]["us-gaap"][
-    "NetCashProvidedByUsedInOperatingActivities"
-]["units"]["USD"]
-
-ocf_df = pd.DataFrame(ocf_records)
-
-ocf_df = ocf_df[ocf_df["form"] == "10-K"].copy()
-ocf_df = ocf_df[
-    ocf_df["start"].notna() & ocf_df["end"].notna()
-].copy()
-
-ocf_df["start"] = pd.to_datetime(ocf_df["start"])
-ocf_df["end"] = pd.to_datetime(ocf_df["end"])
-
-ocf_df["days"] = (
-    ocf_df["end"] - ocf_df["start"]
-).dt.days
-
-# Keep records representing approximately one full fiscal year
-ocf_df = ocf_df[
-    (ocf_df["days"] >= 300) &
-    (ocf_df["days"] <= 400)
-].copy()
-
-ocf_df = ocf_df.drop_duplicates(
-    subset=["start", "end"]
-)
-
-ocf_df = ocf_df[["start", "end", "val"]]
-
-ocf_df = ocf_df.rename(
-    columns={"val": "operating_cash_flow"}
-)
-
-ocf_output = "data/processed/walmart_operating_cash_flow.csv"
-
-ocf_df.to_csv(
-    ocf_output,
-    index=False
-)
-
-print("\nOperating Cash Flow:")
-print(ocf_df.to_string(index=False))
-
-print(
-    f"\nSaved operating cash flow to {ocf_output}"
-)
-
-
-# ---------------------------------------------------------
-# Capital Expenditures
-# ---------------------------------------------------------
-
-capex_records = data["facts"]["us-gaap"][
-    "PaymentsToAcquirePropertyPlantAndEquipment"
-]["units"]["USD"]
-
-capex_df = pd.DataFrame(capex_records)
-
-capex_df = capex_df[capex_df["form"] == "10-K"].copy()
-capex_df = capex_df[
-    capex_df["start"].notna() & capex_df["end"].notna()
-].copy()
-
-capex_df["start"] = pd.to_datetime(capex_df["start"])
-capex_df["end"] = pd.to_datetime(capex_df["end"])
-
-capex_df["days"] = (
-    capex_df["end"] - capex_df["start"]
-).dt.days
-
-# Keep records representing approximately one full fiscal year
-capex_df = capex_df[
-    (capex_df["days"] >= 300) &
-    (capex_df["days"] <= 400)
-].copy()
-
-capex_df = capex_df.drop_duplicates(
-    subset=["start", "end"]
-)
-
-capex_df = capex_df[["start", "end", "val"]]
-
-capex_df = capex_df.rename(
-    columns={"val": "capital_expenditures"}
-)
-
-capex_output = "data/processed/walmart_capex.csv"
-
-capex_df.to_csv(
-    capex_output,
-    index=False
-)
-
-print("\nCapital Expenditures:")
-print(capex_df.to_string(index=False))
-
-print(
-    f"\nSaved capital expenditures to {capex_output}"
-)
+    accounts_receivable = clean_instant_metric(
+        us_gaap["AccountsReceivableNet"]["units"]["USD"],
+        "accounts_receivable",
+    )
+    save_and_print(
+        accounts_receivable,
+        f"{PROCESSED_DIR}/walmart_accounts_receivable.csv",
+        "Clean Walmart Accounts Receivable Data",
+    )
+
+    inventory = clean_instant_metric(
+        us_gaap["InventoryNet"]["units"]["USD"],
+        "inventory",
+    )
+    save_and_print(
+        inventory,
+        f"{PROCESSED_DIR}/walmart_inventory.csv",
+        "Clean Walmart Inventory Data",
+    )
+
+    accounts_payable = clean_instant_metric(
+        us_gaap["AccountsPayableCurrent"]["units"]["USD"],
+        "accounts_payable",
+    )
+    save_and_print(
+        accounts_payable,
+        f"{PROCESSED_DIR}/walmart_accounts_payable.csv",
+        "Clean Walmart Accounts Payable Data",
+    )
+
+    operating_income = clean_duration_metric(
+        us_gaap["OperatingIncomeLoss"]["units"]["USD"],
+        "operating_income",
+    )
+    save_and_print(
+        operating_income,
+        f"{PROCESSED_DIR}/walmart_operating_income.csv",
+        "Clean Walmart Operating Income Data",
+    )
+
+    operating_cash_flow = clean_duration_metric(
+        us_gaap["NetCashProvidedByUsedInOperatingActivities"]["units"]["USD"],
+        "operating_cash_flow",
+    )
+    save_and_print(
+        operating_cash_flow,
+        f"{PROCESSED_DIR}/walmart_operating_cash_flow.csv",
+        "Operating Cash Flow",
+    )
+
+    capex = clean_duration_metric(
+        us_gaap["PaymentsToAcquirePropertyPlantAndEquipment"]["units"]["USD"],
+        "capital_expenditures",
+    )
+    save_and_print(
+        capex,
+        f"{PROCESSED_DIR}/walmart_capex.csv",
+        "Capital Expenditures",
+    )
+
+
+if __name__ == "__main__":
+    main()

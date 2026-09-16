@@ -32,7 +32,7 @@ def main():
     revenue["year"] = revenue["end"].dt.year
     revenue = revenue.sort_values("year")
 
-    revenue["revenue_billions"] = revenue["val"] / 1e9
+    revenue["revenue_billions"] = revenue["revenue"] / 1e9
 
     train = revenue[revenue["year"] <= 2023].copy()
     test = revenue[revenue["year"] > 2023].copy()
