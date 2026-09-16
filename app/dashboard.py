@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import pandas as pd
 import plotly.express as px
 import streamlit as st
@@ -18,6 +20,32 @@ def load_data():
     df["fcf_margin_percent"] = df["fcf_margin"] * 100
 
     return df
+
+
+@st.cache_data
+def load_forecast_data():
+    forecast_frames = []
+
+    for ticker, file_name in {
+        "WMT": "walmart_revenue_forecast.csv",
+        "TGT": "target_revenue_forecast.csv",
+        "COST": "costco_revenue_forecast.csv",
+    }.items():
+        path = Path("data/processed") / file_name
+
+        if not path.exists():
+            continue
+
+        df = pd.read_csv(path)
+        df["ticker"] = ticker
+        forecast_frames.append(df)
+
+    if not forecast_frames:
+        return pd.DataFrame()
+
+    forecast = pd.concat(forecast_frames, ignore_index=True)
+
+    return forecast
 
 
 def format_billions(value):
@@ -47,6 +75,7 @@ def main():
         "Some metrics may be unavailable when companies do not report the "
         "required XBRL tags."
     )
+
     with st.expander("Methodology and limitations"):
         st.markdown(
             """
@@ -79,6 +108,7 @@ def main():
             scenarios are educational estimates, not investment advice.
             """
         )
+
     df = load_data()
 
     st.sidebar.header("Filters")
@@ -166,6 +196,50 @@ def main():
         },
     )
     st.plotly_chart(fcf_fig, use_container_width=True)
+
+    st.subheader("Revenue Forecast")
+
+    forecast = load_forecast_data()
+    forecast = forecast[forecast["ticker"].isin(selected_tickers)].copy()
+
+    if forecast.empty:
+        st.info("No revenue forecast data available.")
+    else:
+        forecast_display = forecast.melt(
+            id_vars=["ticker", "year", "data_type"],
+            value_vars=[
+                "actual_revenue_billions",
+                "linear_trend_prediction",
+            ],
+            var_name="series",
+            value_name="revenue_billions",
+        )
+
+        forecast_display = forecast_display.dropna(
+            subset=["revenue_billions"]
+        )
+
+        forecast_fig = px.line(
+            forecast_display,
+            x="year",
+            y="revenue_billions",
+            color="ticker",
+            line_dash="series",
+            markers=True,
+            labels={
+                "year": "Fiscal Year",
+                "revenue_billions": "Revenue ($B)",
+                "ticker": "Company",
+                "series": "Series",
+            },
+        )
+
+        st.plotly_chart(forecast_fig, use_container_width=True)
+
+        st.caption(
+            "Forecasts use a simple linear trend baseline. They are meant "
+            "for learning and comparison, not precise prediction."
+        )
 
     st.subheader("Working Capital Days")
 
