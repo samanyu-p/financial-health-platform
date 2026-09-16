@@ -1,19 +1,36 @@
+import sys
+
 import pandas as pd
 
 from src.config import COMPANIES, DEFAULT_COMPANY
 
 
-company = COMPANIES[DEFAULT_COMPANY]
-output_prefix = company["output_prefix"]
+def get_company_key():
+    if len(sys.argv) > 1:
+        return sys.argv[1]
 
-operating_cash_flow_path = (
-    f"data/processed/{output_prefix}_operating_cash_flow.csv"
-)
-capex_path = f"data/processed/{output_prefix}_capex.csv"
-output_path = f"data/processed/{output_prefix}_free_cash_flow.csv"
+    return DEFAULT_COMPANY
+
+
+def get_company(company_key):
+    if company_key not in COMPANIES:
+        valid_keys = ", ".join(COMPANIES.keys())
+        raise ValueError(f"Unknown company '{company_key}'. Valid options: {valid_keys}")
+
+    return COMPANIES[company_key]
 
 
 def main():
+    company_key = get_company_key()
+    company = get_company(company_key)
+    output_prefix = company["output_prefix"]
+
+    operating_cash_flow_path = (
+        f"data/processed/{output_prefix}_operating_cash_flow.csv"
+    )
+    capex_path = f"data/processed/{output_prefix}_capex.csv"
+    output_path = f"data/processed/{output_prefix}_free_cash_flow.csv"
+
     operating_cash_flow = pd.read_csv(operating_cash_flow_path)
     operating_cash_flow["start"] = pd.to_datetime(operating_cash_flow["start"])
     operating_cash_flow["end"] = pd.to_datetime(operating_cash_flow["end"])

@@ -1,3 +1,5 @@
+import sys
+
 import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
@@ -5,11 +7,19 @@ from sklearn.metrics import mean_absolute_error, mean_squared_error
 from src.config import COMPANIES, DEFAULT_COMPANY
 
 
-company = COMPANIES[DEFAULT_COMPANY]
-output_prefix = company["output_prefix"]
+def get_company_key():
+    if len(sys.argv) > 1:
+        return sys.argv[1]
 
-INPUT_PATH = f"data/processed/{output_prefix}_revenue.csv"
-OUTPUT_PATH = f"data/processed/{output_prefix}_revenue_forecast.csv"
+    return DEFAULT_COMPANY
+
+
+def get_company(company_key):
+    if company_key not in COMPANIES:
+        valid_keys = ", ".join(COMPANIES.keys())
+        raise ValueError(f"Unknown company '{company_key}'. Valid options: {valid_keys}")
+
+    return COMPANIES[company_key]
 
 
 def calculate_mape(actual, predicted):
@@ -31,7 +41,14 @@ def print_error_metrics(label, actual, predicted):
 
 
 def main():
-    revenue = pd.read_csv(INPUT_PATH)
+    company_key = get_company_key()
+    company = get_company(company_key)
+    output_prefix = company["output_prefix"]
+
+    input_path = f"data/processed/{output_prefix}_revenue.csv"
+    output_path = f"data/processed/{output_prefix}_revenue_forecast.csv"
+
+    revenue = pd.read_csv(input_path)
 
     revenue["end"] = pd.to_datetime(revenue["end"])
     revenue["year"] = revenue["end"].dt.year
@@ -39,8 +56,8 @@ def main():
 
     revenue["revenue_billions"] = revenue["revenue"] / 1e9
 
-    train = revenue[revenue["year"] <= 2023].copy()
-    test = revenue[revenue["year"] > 2023].copy()
+    train = revenue.iloc[:-3].copy()
+    test = revenue.iloc[-3:].copy()
 
     x_train = train[["year"]]
     y_train = train["revenue_billions"]
@@ -57,7 +74,10 @@ def main():
         "revenue_billions"
     ]
 
-    future_years = pd.DataFrame({"year": [2027, 2028, 2029]})
+    last_year = int(revenue["year"].max())
+    future_years = pd.DataFrame(
+        {"year": [last_year + 1, last_year + 2, last_year + 3]}
+    )
     future_years["linear_trend_prediction"] = model.predict(future_years)
     future_years["naive_prediction"] = pd.NA
     future_years["actual_revenue_billions"] = pd.NA
@@ -80,7 +100,7 @@ def main():
         ignore_index=True,
     )
 
-    forecast.to_csv(OUTPUT_PATH, index=False)
+    forecast.to_csv(output_path, index=False)
 
     print(f"{company['name']} Revenue Forecast Model")
     print("----------------------")
@@ -109,7 +129,7 @@ def main():
     print("Forecast:")
     print(forecast.tail(6).to_string(index=False))
     print()
-    print(f"Saved forecast to {OUTPUT_PATH}")
+    print(f"Saved forecast to {output_path}")
 
 
 if __name__ == "__main__":
