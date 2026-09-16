@@ -4,6 +4,8 @@ import pandas as pd
 INPUT_PATH = "data/processed/walmart_financial_health.csv"
 OUTPUT_PATH = "data/processed/walmart_scenario_analysis.csv"
 
+# These are illustrative assumptions for learning and portfolio purposes.
+# They are loosely based on recent Walmart history, not company guidance.
 
 SCENARIOS = [
     {
