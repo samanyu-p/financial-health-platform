@@ -6,6 +6,7 @@ import streamlit as st
 
 
 DATA_PATH = "data/processed/company_comparison.csv"
+SCENARIO_PATH = "data/processed/walmart_scenario_analysis.csv"
 
 
 @st.cache_data
@@ -46,6 +47,24 @@ def load_forecast_data():
     forecast = pd.concat(forecast_frames, ignore_index=True)
 
     return forecast
+
+
+@st.cache_data
+def load_scenario_data():
+    path = Path(SCENARIO_PATH)
+
+    if not path.exists():
+        return pd.DataFrame()
+
+    df = pd.read_csv(path)
+
+    df["revenue_billions"] = df["revenue"] / 1e9
+    df["operating_income_billions"] = df["operating_income"] / 1e9
+    df["free_cash_flow_billions"] = df["free_cash_flow"] / 1e9
+    df["operating_margin_percent"] = df["operating_margin"] * 100
+    df["revenue_growth_percent"] = df["revenue_growth"] * 100
+
+    return df
 
 
 def format_billions(value):
@@ -239,6 +258,63 @@ def main():
         st.caption(
             "Forecasts use a simple linear trend baseline. They are meant "
             "for learning and comparison, not precise prediction."
+        )
+
+    st.subheader("Walmart Scenario Analysis")
+
+    scenario = load_scenario_data()
+
+    if scenario.empty:
+        st.info("No scenario data available.")
+    else:
+        scenario_metric = st.selectbox(
+            "Scenario metric",
+            options=[
+                "revenue_billions",
+                "operating_income_billions",
+                "free_cash_flow_billions",
+                "ccc",
+            ],
+            format_func={
+                "revenue_billions": "Revenue ($B)",
+                "operating_income_billions": "Operating Income ($B)",
+                "free_cash_flow_billions": "Free Cash Flow ($B)",
+                "ccc": "Cash Conversion Cycle (days)",
+            }.get,
+        )
+
+        scenario_fig = px.bar(
+            scenario,
+            x="scenario",
+            y=scenario_metric,
+            color="scenario",
+            title="2027 Walmart Scenario Comparison",
+            labels={
+                "scenario": "Scenario",
+                scenario_metric: "Value",
+            },
+        )
+        st.plotly_chart(scenario_fig, use_container_width=True)
+
+        st.caption(
+            "Scenario assumptions are illustrative and based loosely on recent "
+            "Walmart history. They are not company guidance."
+        )
+
+        st.dataframe(
+            scenario[
+                [
+                    "scenario",
+                    "revenue_growth",
+                    "operating_margin",
+                    "dso",
+                    "dio",
+                    "dpo",
+                    "ccc",
+                    "free_cash_flow",
+                ]
+            ],
+            use_container_width=True,
         )
 
     st.subheader("Working Capital Days")
