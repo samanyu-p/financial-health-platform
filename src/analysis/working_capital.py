@@ -1,26 +1,29 @@
 import json
+import sys
+from pathlib import Path
 
 import pandas as pd
 
 from src.config import COMPANIES, DEFAULT_COMPANY
 
 
-company = COMPANIES[DEFAULT_COMPANY]
-tags = company["tags"]
-output_prefix = company["output_prefix"]
-
-RAW_FILE_PATH = f"data/raw/{output_prefix}_companyfacts.json"
-
-REVENUE_PATH = f"data/processed/{output_prefix}_revenue.csv"
-ACCOUNTS_RECEIVABLE_PATH = (
-    f"data/processed/{output_prefix}_accounts_receivable.csv"
-)
-INVENTORY_PATH = f"data/processed/{output_prefix}_inventory.csv"
-ACCOUNTS_PAYABLE_PATH = f"data/processed/{output_prefix}_accounts_payable.csv"
-OUTPUT_PATH = f"data/processed/{output_prefix}_working_capital.csv"
-
 ANNUAL_DAYS_MIN = 300
 ANNUAL_DAYS_MAX = 400
+
+
+def get_company_key():
+    if len(sys.argv) > 1:
+        return sys.argv[1]
+
+    return DEFAULT_COMPANY
+
+
+def get_company(company_key):
+    if company_key not in COMPANIES:
+        valid_keys = ", ".join(COMPANIES.keys())
+        raise ValueError(f"Unknown company '{company_key}'. Valid options: {valid_keys}")
+
+    return COMPANIES[company_key]
 
 
 def keep_latest_period_filing(df, duplicate_columns):
@@ -57,20 +60,56 @@ def clean_cost_of_revenue(records):
     return cost
 
 
+def read_processed_csv(path):
+    if not Path(path).exists():
+        return None
+
+    df = pd.read_csv(path)
+    df["end"] = pd.to_datetime(df["end"])
+
+    return df
+
+
 def main():
-    revenue = pd.read_csv(REVENUE_PATH)
-    revenue["end"] = pd.to_datetime(revenue["end"])
+    company_key = get_company_key()
+    company = get_company(company_key)
 
-    accounts_receivable = pd.read_csv(ACCOUNTS_RECEIVABLE_PATH)
-    accounts_receivable["end"] = pd.to_datetime(accounts_receivable["end"])
+    tags = company["tags"]
+    output_prefix = company["output_prefix"]
 
-    inventory = pd.read_csv(INVENTORY_PATH)
-    inventory["end"] = pd.to_datetime(inventory["end"])
+    raw_file_path = f"data/raw/{output_prefix}_companyfacts.json"
 
-    accounts_payable = pd.read_csv(ACCOUNTS_PAYABLE_PATH)
-    accounts_payable["end"] = pd.to_datetime(accounts_payable["end"])
+    revenue_path = f"data/processed/{output_prefix}_revenue.csv"
+    accounts_receivable_path = (
+        f"data/processed/{output_prefix}_accounts_receivable.csv"
+    )
+    inventory_path = f"data/processed/{output_prefix}_inventory.csv"
+    accounts_payable_path = f"data/processed/{output_prefix}_accounts_payable.csv"
+    output_path = f"data/processed/{output_prefix}_working_capital.csv"
 
-    with open(RAW_FILE_PATH, "r") as file:
+    revenue = read_processed_csv(revenue_path)
+    accounts_receivable = read_processed_csv(accounts_receivable_path)
+    inventory = read_processed_csv(inventory_path)
+    accounts_payable = read_processed_csv(accounts_payable_path)
+
+    required_inputs = {
+        "revenue": revenue,
+        "inventory": inventory,
+        "accounts_payable": accounts_payable,
+    }
+
+    missing_required = [
+        name for name, df in required_inputs.items() if df is None
+    ]
+
+    if missing_required:
+        missing_text = ", ".join(missing_required)
+        raise FileNotFoundError(
+            f"Cannot calculate working capital for {company['name']}. "
+            f"Missing processed files for: {missing_text}"
+        )
+
+    with open(raw_file_path, "r") as file:
         data = json.load(file)
 
     cost_of_revenue = clean_cost_of_revenue(
@@ -79,13 +118,6 @@ def main():
 
     df = pd.merge(
         revenue,
-        accounts_receivable,
-        on="end",
-        how="inner",
-    )
-
-    df = pd.merge(
-        df,
         inventory,
         on="end",
         how="inner",
@@ -105,12 +137,26 @@ def main():
         how="inner",
     )
 
+    has_accounts_receivable = accounts_receivable is not None
+
+    if has_accounts_receivable:
+        df = pd.merge(
+            df,
+            accounts_receivable,
+            on="end",
+            how="inner",
+        )
+
     df = df.sort_values("end")
 
-    df["average_ar"] = (
-        df["accounts_receivable"] + df["accounts_receivable"].shift(1)
-    ) / 2
-    df["dso"] = df["average_ar"] / df["revenue"] * 365
+    if has_accounts_receivable:
+        df["average_ar"] = (
+            df["accounts_receivable"] + df["accounts_receivable"].shift(1)
+        ) / 2
+        df["dso"] = df["average_ar"] / df["revenue"] * 365
+    else:
+        df["accounts_receivable"] = pd.NA
+        df["dso"] = pd.NA
 
     df["average_inventory"] = (
         df["inventory"] + df["inventory"].shift(1)
@@ -122,7 +168,14 @@ def main():
     ) / 2
     df["dpo"] = df["average_ap"] / df["cost_of_revenue"] * 365
 
-    df["ccc"] = df["dso"] + df["dio"] - df["dpo"]
+    if has_accounts_receivable:
+        df["ccc"] = df["dso"] + df["dio"] - df["dpo"]
+    else:
+        df["ccc"] = pd.NA
+        print(
+            f"\nWarning: {company['name']} is missing accounts receivable data. "
+            "DSO and full CCC cannot be calculated."
+        )
 
     display_columns = [
         "end",
@@ -149,9 +202,9 @@ def main():
     print(f"\n{company['name']} Working Capital Analysis:\n")
     print(df[display_columns].to_string(index=False))
 
-    df[output_columns].to_csv(OUTPUT_PATH, index=False)
+    df[output_columns].to_csv(output_path, index=False)
 
-    print(f"\nSaved working capital analysis to {OUTPUT_PATH}")
+    print(f"\nSaved working capital analysis to {output_path}")
 
 
 if __name__ == "__main__":
