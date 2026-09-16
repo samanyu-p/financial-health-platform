@@ -1,103 +1,48 @@
 import pandas as pd
 
-# -----------------------------
-# Load Revenue
-# -----------------------------
-
-revenue_df = pd.read_csv(
-    "data/processed/walmart_revenue.csv"
-)
-
-revenue_df["end"] = pd.to_datetime(
-    revenue_df["end"]
-)
-
-revenue_df = revenue_df.rename(
-    columns={"val": "revenue"}
-)
+from src.config import COMPANIES, DEFAULT_COMPANY
 
 
-# -----------------------------
-# Load Operating Income
-# -----------------------------
+company = COMPANIES[DEFAULT_COMPANY]
+output_prefix = company["output_prefix"]
 
-operating_df = pd.read_csv(
-    "data/processed/walmart_operating_income.csv"
-)
-
-operating_df["end"] = pd.to_datetime(
-    operating_df["end"]
-)
-
-operating_df = operating_df.rename(
-    columns={"val": "operating_income"}
-)
+revenue_path = f"data/processed/{output_prefix}_revenue.csv"
+operating_income_path = f"data/processed/{output_prefix}_operating_income.csv"
+output_path = f"data/processed/{output_prefix}_profitability.csv"
 
 
-# -----------------------------
-# Merge Revenue and
-# Operating Income
-# -----------------------------
+def main():
+    revenue_df = pd.read_csv(revenue_path)
+    revenue_df["end"] = pd.to_datetime(revenue_df["end"])
 
-df = pd.merge(
-    revenue_df,
-    operating_df,
-    on="end",
-    how="inner"
-)
+    operating_df = pd.read_csv(operating_income_path)
+    operating_df["end"] = pd.to_datetime(operating_df["end"])
 
-df = df.sort_values("end")
+    df = pd.merge(
+        revenue_df,
+        operating_df,
+        on="end",
+        how="inner",
+    )
 
+    df = df.sort_values("end")
 
-# -----------------------------
-# Calculate Operating Margin
-# -----------------------------
+    df["operating_margin"] = df["operating_income"] / df["revenue"]
 
-df["operating_margin"] = (
-    df["operating_income"]
-    / df["revenue"]
-)
-
-
-# -----------------------------
-# Display Results
-# -----------------------------
-
-print("\nWalmart Profitability Analysis:\n")
-
-print(
-    df[
-        [
-            "end",
-            "revenue",
-            "operating_income",
-            "operating_margin"
-        ]
-    ].to_string(index=False)
-)
-
-
-# -----------------------------
-# Save Results
-# -----------------------------
-
-output_path = (
-    "data/processed/"
-    "walmart_profitability.csv"
-)
-
-df[
-    [
+    output_columns = [
         "end",
         "revenue",
         "operating_income",
-        "operating_margin"
+        "operating_margin",
     ]
-].to_csv(
-    output_path,
-    index=False
-)
 
-print(
-    f"\nSaved profitability analysis to {output_path}"
-)
+    print(f"\n{company['name']} Profitability Analysis:\n")
+    print(df[output_columns].to_string(index=False))
+
+    df[output_columns].to_csv(output_path, index=False)
+
+    print(f"\nSaved profitability analysis to {output_path}")
+
+
+if __name__ == "__main__":
+    main()

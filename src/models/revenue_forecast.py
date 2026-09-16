@@ -2,9 +2,14 @@ import pandas as pd
 from sklearn.linear_model import LinearRegression
 from sklearn.metrics import mean_absolute_error, mean_squared_error
 
+from src.config import COMPANIES, DEFAULT_COMPANY
 
-INPUT_PATH = "data/processed/walmart_revenue.csv"
-OUTPUT_PATH = "data/processed/walmart_revenue_forecast.csv"
+
+company = COMPANIES[DEFAULT_COMPANY]
+output_prefix = company["output_prefix"]
+
+INPUT_PATH = f"data/processed/{output_prefix}_revenue.csv"
+OUTPUT_PATH = f"data/processed/{output_prefix}_revenue_forecast.csv"
 
 
 def calculate_mape(actual, predicted):
@@ -48,7 +53,9 @@ def main():
 
     test["linear_trend_prediction"] = model.predict(x_test)
     test["naive_prediction"] = test["revenue_billions"].shift(1)
-    test.loc[test.index[0], "naive_prediction"] = train.iloc[-1]["revenue_billions"]
+    test.loc[test.index[0], "naive_prediction"] = train.iloc[-1][
+        "revenue_billions"
+    ]
 
     future_years = pd.DataFrame({"year": [2027, 2028, 2029]})
     future_years["linear_trend_prediction"] = model.predict(future_years)
@@ -58,13 +65,13 @@ def main():
 
     historical_predictions = revenue[["year", "revenue_billions"]].copy()
     historical_predictions["linear_trend_prediction"] = model.predict(
-    historical_predictions[["year"]]
+        historical_predictions[["year"]]
     )
     historical_predictions["naive_prediction"] = historical_predictions[
-    "revenue_billions"
+        "revenue_billions"
     ].shift(1)
     historical_predictions = historical_predictions.rename(
-    columns={"revenue_billions": "actual_revenue_billions"}
+        columns={"revenue_billions": "actual_revenue_billions"}
     )
     historical_predictions["data_type"] = "historical"
 
@@ -75,7 +82,7 @@ def main():
 
     forecast.to_csv(OUTPUT_PATH, index=False)
 
-    print("Revenue Forecast Model")
+    print(f"{company['name']} Revenue Forecast Model")
     print("----------------------")
     print(f"Training years: {train['year'].min()}-{train['year'].max()}")
     print(f"Testing years: {test['year'].min()}-{test['year'].max()}")

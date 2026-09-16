@@ -1,207 +1,139 @@
 import json
+
 import pandas as pd
 
-# -----------------------------
-# Load Revenue
-# -----------------------------
-
-revenue_df = pd.read_csv("data/processed/walmart_revenue.csv")
-revenue_df["end"] = pd.to_datetime(revenue_df["end"])
-revenue_df = revenue_df.rename(columns={"val": "revenue"})
+from src.config import COMPANIES, DEFAULT_COMPANY
 
 
-# -----------------------------
-# Load Accounts Receivable
-# -----------------------------
+company = COMPANIES[DEFAULT_COMPANY]
+tags = company["tags"]
+output_prefix = company["output_prefix"]
 
-ar_df = pd.read_csv("data/processed/walmart_accounts_receivable.csv")
-ar_df["end"] = pd.to_datetime(ar_df["end"])
-ar_df = ar_df.rename(columns={"val": "accounts_receivable"})
+RAW_FILE_PATH = f"data/raw/{output_prefix}_companyfacts.json"
 
-
-# -----------------------------
-# Load Inventory
-# -----------------------------
-
-inventory_df = pd.read_csv("data/processed/walmart_inventory.csv")
-inventory_df["end"] = pd.to_datetime(inventory_df["end"])
-inventory_df = inventory_df.rename(columns={"val": "inventory"})
-
-
-# -----------------------------
-# Load Accounts Payable
-# -----------------------------
-
-ap_df = pd.read_csv("data/processed/walmart_accounts_payable.csv")
-ap_df["end"] = pd.to_datetime(ap_df["end"])
-ap_df = ap_df.rename(columns={"val": "accounts_payable"})
-
-
-# -----------------------------
-# Load Cost of Revenue
-# -----------------------------
-
-with open("data/raw/walmart_companyfacts.json", "r") as file:
-    data = json.load(file)
-
-cost_records = data["facts"]["us-gaap"]["CostOfRevenue"]["units"]["USD"]
-
-cost_df = pd.DataFrame(cost_records)
-
-# Keep annual 10-K filings
-cost_df = cost_df[cost_df["form"] == "10-K"].copy()
-
-# Keep records with start and end dates
-cost_df = cost_df[
-    cost_df["start"].notna() & cost_df["end"].notna()
-].copy()
-
-# Convert dates
-cost_df["start"] = pd.to_datetime(cost_df["start"])
-cost_df["end"] = pd.to_datetime(cost_df["end"])
-
-# Keep approximately annual periods
-cost_df["days"] = (
-    cost_df["end"] - cost_df["start"]
-).dt.days
-
-cost_df = cost_df[
-    (cost_df["days"] >= 300) &
-    (cost_df["days"] <= 400)
-].copy()
-
-# Remove duplicate reporting periods
-cost_df = cost_df.drop_duplicates(subset=["start", "end"])
-
-# Keep only the columns we need
-cost_df = cost_df[["end", "val"]]
-
-cost_df = cost_df.rename(
-    columns={"val": "cost_of_revenue"}
+REVENUE_PATH = f"data/processed/{output_prefix}_revenue.csv"
+ACCOUNTS_RECEIVABLE_PATH = (
+    f"data/processed/{output_prefix}_accounts_receivable.csv"
 )
+INVENTORY_PATH = f"data/processed/{output_prefix}_inventory.csv"
+ACCOUNTS_PAYABLE_PATH = f"data/processed/{output_prefix}_accounts_payable.csv"
+OUTPUT_PATH = f"data/processed/{output_prefix}_working_capital.csv"
+
+ANNUAL_DAYS_MIN = 300
+ANNUAL_DAYS_MAX = 400
 
 
-# -----------------------------
-# Merge the Data
-# -----------------------------
+def keep_latest_period_filing(df, duplicate_columns):
+    df = df.copy()
+    df["filed"] = pd.to_datetime(df["filed"])
 
-df = pd.merge(
-    revenue_df,
-    ar_df,
-    on="end",
-    how="inner"
-)
+    df = df.sort_values(duplicate_columns + ["filed", "accn"])
+    df = df.drop_duplicates(subset=duplicate_columns, keep="last")
 
-df = pd.merge(
-    df,
-    inventory_df,
-    on="end",
-    how="inner"
-)
-
-df = pd.merge(
-    df,
-    ap_df,
-    on="end",
-    how="inner"
-)
-
-df = pd.merge(
-    df,
-    cost_df,
-    on="end",
-    how="inner"
-)
-
-df = df.sort_values("end")
+    return df
 
 
-# -----------------------------
-# Calculate DSO
-# -----------------------------
+def clean_cost_of_revenue(records):
+    cost = pd.DataFrame(records)
 
-df["average_ar"] = (
-    df["accounts_receivable"]
-    + df["accounts_receivable"].shift(1)
-) / 2
+    cost = cost[cost["form"] == "10-K"].copy()
+    cost = cost[cost["start"].notna() & cost["end"].notna()].copy()
 
-df["dso"] = (
-    df["average_ar"]
-    / df["revenue"]
-    * 365
-)
+    cost["start"] = pd.to_datetime(cost["start"])
+    cost["end"] = pd.to_datetime(cost["end"])
 
+    cost["days"] = (cost["end"] - cost["start"]).dt.days
+    cost = cost[
+        (cost["days"] >= ANNUAL_DAYS_MIN)
+        & (cost["days"] <= ANNUAL_DAYS_MAX)
+    ].copy()
 
-# -----------------------------
-# Calculate DIO
-# -----------------------------
+    cost = keep_latest_period_filing(cost, ["start", "end"])
 
-df["average_inventory"] = (
-    df["inventory"]
-    + df["inventory"].shift(1)
-) / 2
+    cost = cost[["end", "val"]]
+    cost = cost.rename(columns={"val": "cost_of_revenue"})
+    cost = cost.sort_values("end")
 
-df["dio"] = (
-    df["average_inventory"]
-    / df["cost_of_revenue"]
-    * 365
-)
+    return cost
 
 
-# -----------------------------
-# Calculate DPO
-# -----------------------------
+def main():
+    revenue = pd.read_csv(REVENUE_PATH)
+    revenue["end"] = pd.to_datetime(revenue["end"])
 
-df["average_ap"] = (
-    df["accounts_payable"]
-    + df["accounts_payable"].shift(1)
-) / 2
+    accounts_receivable = pd.read_csv(ACCOUNTS_RECEIVABLE_PATH)
+    accounts_receivable["end"] = pd.to_datetime(accounts_receivable["end"])
 
-df["dpo"] = (
-    df["average_ap"]
-    / df["cost_of_revenue"]
-    * 365
-)
+    inventory = pd.read_csv(INVENTORY_PATH)
+    inventory["end"] = pd.to_datetime(inventory["end"])
 
+    accounts_payable = pd.read_csv(ACCOUNTS_PAYABLE_PATH)
+    accounts_payable["end"] = pd.to_datetime(accounts_payable["end"])
 
-# -----------------------------
-# Calculate Cash Conversion Cycle
-# -----------------------------
+    with open(RAW_FILE_PATH, "r") as file:
+        data = json.load(file)
 
-df["ccc"] = (
-    df["dso"]
-    + df["dio"]
-    - df["dpo"]
-)
+    cost_of_revenue = clean_cost_of_revenue(
+        data["facts"]["us-gaap"][tags["cost_of_revenue"]]["units"]["USD"]
+    )
 
+    df = pd.merge(
+        revenue,
+        accounts_receivable,
+        on="end",
+        how="inner",
+    )
 
-# -----------------------------
-# Display Results
-# -----------------------------
+    df = pd.merge(
+        df,
+        inventory,
+        on="end",
+        how="inner",
+    )
 
-print("\nWalmart Working Capital Analysis:\n")
+    df = pd.merge(
+        df,
+        accounts_payable,
+        on="end",
+        how="inner",
+    )
 
-print(
-    df[
-        [
-            "end",
-            "revenue",
-            "dso",
-            "dio",
-            "dpo",
-            "ccc"
-        ]
-    ].to_string(index=False)
-)
+    df = pd.merge(
+        df,
+        cost_of_revenue,
+        on="end",
+        how="inner",
+    )
 
-# -----------------------------
-# Save Working Capital Analysis
-# -----------------------------
+    df = df.sort_values("end")
 
-output_path = "data/processed/walmart_working_capital.csv"
+    df["average_ar"] = (
+        df["accounts_receivable"] + df["accounts_receivable"].shift(1)
+    ) / 2
+    df["dso"] = df["average_ar"] / df["revenue"] * 365
 
-df[
-    [
+    df["average_inventory"] = (
+        df["inventory"] + df["inventory"].shift(1)
+    ) / 2
+    df["dio"] = df["average_inventory"] / df["cost_of_revenue"] * 365
+
+    df["average_ap"] = (
+        df["accounts_payable"] + df["accounts_payable"].shift(1)
+    ) / 2
+    df["dpo"] = df["average_ap"] / df["cost_of_revenue"] * 365
+
+    df["ccc"] = df["dso"] + df["dio"] - df["dpo"]
+
+    display_columns = [
+        "end",
+        "revenue",
+        "dso",
+        "dio",
+        "dpo",
+        "ccc",
+    ]
+
+    output_columns = [
         "end",
         "revenue",
         "accounts_receivable",
@@ -211,8 +143,16 @@ df[
         "dso",
         "dio",
         "dpo",
-        "ccc"
+        "ccc",
     ]
-].to_csv(output_path, index=False)
 
-print(f"\nSaved working capital analysis to {output_path}")
+    print(f"\n{company['name']} Working Capital Analysis:\n")
+    print(df[display_columns].to_string(index=False))
+
+    df[output_columns].to_csv(OUTPUT_PATH, index=False)
+
+    print(f"\nSaved working capital analysis to {OUTPUT_PATH}")
+
+
+if __name__ == "__main__":
+    main()

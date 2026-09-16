@@ -1,12 +1,16 @@
 import pandas as pd
 
+from src.config import COMPANIES, DEFAULT_COMPANY
 
-INPUT_PATH = "data/processed/walmart_financial_health.csv"
-OUTPUT_PATH = "data/processed/walmart_scenario_analysis.csv"
+
+company = COMPANIES[DEFAULT_COMPANY]
+output_prefix = company["output_prefix"]
+
+INPUT_PATH = f"data/processed/{output_prefix}_financial_health.csv"
+OUTPUT_PATH = f"data/processed/{output_prefix}_scenario_analysis.csv"
 
 # These are illustrative assumptions for learning and portfolio purposes.
 # They are loosely based on recent Walmart history, not company guidance.
-
 SCENARIOS = [
     {
         "scenario": "Downside",
@@ -121,7 +125,7 @@ def main():
     for column in dollar_columns:
         display[column] = display[column] / 1e9
 
-    print("Walmart Scenario Analysis")
+    print(f"{company['name']} Scenario Analysis")
     print("-------------------------")
     print(f"Base year: {latest_year['end'].year}")
     print(f"Scenario year: {next_year}")

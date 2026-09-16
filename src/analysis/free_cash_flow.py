@@ -1,77 +1,55 @@
 import pandas as pd
 
+from src.config import COMPANIES, DEFAULT_COMPANY
 
-# Load operating cash flow
-ocf_df = pd.read_csv(
-    "data/processed/walmart_operating_cash_flow.csv"
+
+company = COMPANIES[DEFAULT_COMPANY]
+output_prefix = company["output_prefix"]
+
+operating_cash_flow_path = (
+    f"data/processed/{output_prefix}_operating_cash_flow.csv"
 )
-
-ocf_df["end"] = pd.to_datetime(ocf_df["end"])
-
-
-# Load capital expenditures
-capex_df = pd.read_csv(
-    "data/processed/walmart_capex.csv"
-)
-
-capex_df["end"] = pd.to_datetime(capex_df["end"])
+capex_path = f"data/processed/{output_prefix}_capex.csv"
+output_path = f"data/processed/{output_prefix}_free_cash_flow.csv"
 
 
-# Combine the two datasets
-df = pd.merge(
-    ocf_df,
-    capex_df,
-    on=["start", "end"],
-    how="inner"
-)
+def main():
+    operating_cash_flow = pd.read_csv(operating_cash_flow_path)
+    operating_cash_flow["start"] = pd.to_datetime(operating_cash_flow["start"])
+    operating_cash_flow["end"] = pd.to_datetime(operating_cash_flow["end"])
 
+    capex = pd.read_csv(capex_path)
+    capex["start"] = pd.to_datetime(capex["start"])
+    capex["end"] = pd.to_datetime(capex["end"])
 
-# Calculate Free Cash Flow
-df["free_cash_flow"] = (
-    df["operating_cash_flow"]
-    - df["capital_expenditures"]
-)
+    df = pd.merge(
+        operating_cash_flow,
+        capex,
+        on=["start", "end"],
+        how="inner",
+    )
 
+    df["free_cash_flow"] = (
+        df["operating_cash_flow"] - df["capital_expenditures"]
+    )
 
-# Calculate FCF margin
-df["fcf_margin"] = (
-    df["free_cash_flow"]
-    / df["operating_cash_flow"]
-)
+    df["fcf_margin"] = df["free_cash_flow"] / df["operating_cash_flow"]
 
-
-# Display results
-print("\nWalmart Free Cash Flow Analysis:\n")
-
-print(
-    df[
-        [
-            "end",
-            "operating_cash_flow",
-            "capital_expenditures",
-            "free_cash_flow",
-            "fcf_margin"
-        ]
-    ].to_string(index=False)
-)
-
-
-# Save results
-output_path = "data/processed/walmart_free_cash_flow.csv"
-
-df[
-    [
+    output_columns = [
         "end",
         "operating_cash_flow",
         "capital_expenditures",
         "free_cash_flow",
-        "fcf_margin"
+        "fcf_margin",
     ]
-].to_csv(
-    output_path,
-    index=False
-)
 
-print(
-    f"\nSaved FCF analysis to {output_path}"
-)
+    print(f"\n{company['name']} Free Cash Flow Analysis:\n")
+    print(df[output_columns].to_string(index=False))
+
+    df[output_columns].to_csv(output_path, index=False)
+
+    print(f"\nSaved FCF analysis to {output_path}")
+
+
+if __name__ == "__main__":
+    main()
