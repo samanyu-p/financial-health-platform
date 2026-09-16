@@ -47,7 +47,38 @@ def main():
         "Some metrics may be unavailable when companies do not report the "
         "required XBRL tags."
     )
+    with st.expander("Methodology and limitations"):
+        st.markdown(
+            """
+            This dashboard uses SEC Company Facts data to compare financial
+            health across selected public retailers.
 
+            **Current scope**
+            - The current analysis is retail-focused.
+            - Walmart, Target, and Costco are included as initial examples.
+            - The pipeline is designed to expand, but not every metric applies
+              to every company or industry.
+
+            **Key metrics**
+            - Revenue growth shows how sales changed year over year.
+            - Operating margin measures operating income as a percentage of revenue.
+            - DIO estimates how many days inventory is held before sale.
+            - DPO estimates how many days the company takes to pay suppliers.
+            - CCC normally equals DSO + DIO - DPO.
+            - Free cash flow equals operating cash flow minus capital expenditures.
+
+            **Missing metrics**
+            Target and Costco do not currently expose the accounts receivable tag
+            used by this project. Because DSO requires accounts receivable, full
+            CCC is not calculated for those companies.
+
+            **Limitations**
+            SEC XBRL tags can vary across companies, industries, and filing years.
+            The project includes tag compatibility checks, but financial metrics
+            should still be reviewed before making conclusions. Forecasts and
+            scenarios are educational estimates, not investment advice.
+            """
+        )
     df = load_data()
 
     st.sidebar.header("Filters")
