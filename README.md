@@ -1,51 +1,31 @@
 # Corporate Financial Health & Working Capital Analysis
 
-## What I'm Building
+## Overview
 
-I wanted to build a project that combines data science with something I could actually see myself using in finance.
+This project is an end-to-end financial analytics platform that uses SEC Company Facts data to analyze public companies across revenue growth, profitability, working capital, free cash flow, forecasting, and scenario analysis.
 
-This project looks at a company's financial statements and tries to answer a few basic questions:
+The project started with Walmart and has expanded to compare Walmart, Target, and Costco. It is currently retail-focused because working-capital metrics such as inventory days, payables days, and cash conversion cycle are most meaningful for companies with inventory-heavy business models.
 
-- Is the company growing?
-- Are its margins improving or getting worse?
-- How efficiently is it managing working capital?
-- How long does it take for cash spent on operations to come back?
-- What happens to cash flow if some of these numbers change?
+## Goals
 
-I'll start by analyzing a few large public companies and then build the analysis into an interactive dashboard.
+The goal of this project is to build something stronger than a basic machine-learning notebook. It is designed to show:
 
-## What I'm Analyzing
+- Python data engineering
+- SEC financial statement data collection
+- Pandas-based cleaning and transformation
+- Financial metric calculation
+- Multi-company comparison
+- Forecasting and scenario analysis
+- SQLite / SQL querying
+- Streamlit dashboarding
+- Git/GitHub workflow
+- Business interpretation and data-quality awareness
 
-Some of the main metrics I'll work with are:
+## Data Source
 
-- Revenue growth
-- Gross margin
-- Operating margin
-- Current ratio
-- Days Sales Outstanding (DSO)
-- Days Inventory Outstanding (DIO)
-- Days Payables Outstanding (DPO)
-- Cash Conversion Cycle (CCC)
-- Free Cash Flow (FCF)
+The project uses the SEC Company Facts API.
 
-## Why I Chose This Project
+Example:
 
-I wanted something beyond a basic machine learning project where I just train a model and report the accuracy.
-
-Financial statements have a lot of information in them, but I wanted to practice turning that information into metrics, trends, and decisions that could actually be useful to a business or investor.
-
-## Tools
-
-- Python
-- Pandas
-- NumPy
-- Plotly
-- Streamlit
-- SQLite
-- Git/GitHub
-
-## Current Status
-
-Currently building the data pipeline and financial analysis.
-
-More features will be added as I work through the project.
+```text
+https://data.sec.gov/api/xbrl/companyfacts/CIK0000104169.json
