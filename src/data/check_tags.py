@@ -1,7 +1,9 @@
 import json
 import sys
+from pathlib import Path
 
 from src.config import COMPANIES, DEFAULT_COMPANY
+from src.data.company_lookup import lookup_company_by_ticker
 
 
 TAG_CANDIDATES = {
@@ -78,6 +80,31 @@ def get_company_key():
     return DEFAULT_COMPANY
 
 
+def get_company(company_key):
+    company_key_lower = company_key.lower()
+
+    if company_key_lower in COMPANIES:
+        return COMPANIES[company_key_lower]
+
+    company = lookup_company_by_ticker(company_key)
+
+    if company is None:
+        valid_keys = ", ".join(COMPANIES.keys())
+        raise ValueError(
+            f"Unknown company or ticker '{company_key}'. "
+            f"Configured options: {valid_keys}"
+        )
+
+    return {
+        "name": company["name"],
+        "ticker": company["ticker"],
+        "cik": company["cik"],
+        "output_prefix": company["ticker"].lower(),
+        "facts_url": company["facts_url"],
+        "tags": {},
+    }
+
+
 def find_available_tags(us_gaap):
     selected_tags = {}
 
@@ -131,13 +158,15 @@ def print_suggested_config(selected_tags):
 
 def main():
     company_key = get_company_key()
+    company = get_company(company_key)
+    input_path = Path(
+        f"data/raw/{company['output_prefix']}_companyfacts.json"
+    )
 
-    if company_key not in COMPANIES:
-        valid_keys = ", ".join(COMPANIES.keys())
-        raise ValueError(f"Unknown company '{company_key}'. Valid options: {valid_keys}")
-
-    company = COMPANIES[company_key]
-    input_path = f"data/raw/{company['output_prefix']}_companyfacts.json"
+    if not input_path.exists():
+        raise FileNotFoundError(
+            f"Missing {input_path}. Run fetch_data first for {company_key}."
+        )
 
     with open(input_path, "r") as file:
         data = json.load(file)
