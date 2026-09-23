@@ -118,10 +118,10 @@ def show_dynamic_ticker_section():
                 st.code(str(error))
                 return
 
-        company = support_result["company"]
+                company = support_result["company"]
         supported = support_result["supported_analyses"]
 
-                st.write(f"**Company:** {company['name']}")
+        st.write(f"**Company:** {company['name']}")
         st.write(f"**Ticker:** {company['ticker']}")
         st.write(f"**CIK:** {company['cik']}")
 
