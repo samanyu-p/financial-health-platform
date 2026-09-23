@@ -6,6 +6,12 @@ This project is an end-to-end financial analytics platform that uses SEC Company
 
 The project started with Walmart and expanded to compare Walmart, Target, and Costco. It is currently retail-focused because working-capital metrics such as inventory days, payables days, and cash conversion cycle are most meaningful for inventory-heavy businesses.
 
+## Live Dashboard
+
+The deployed Streamlit dashboard is available here:
+
+[Corporate Financial Health Dashboard](https://financial-health-platform-7pnext59cqhpv6wjjxfufm.streamlit.app/)
+
 ## Goals
 
 This project is designed to show:
