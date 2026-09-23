@@ -121,9 +121,17 @@ def show_dynamic_ticker_section():
         company = support_result["company"]
         supported = support_result["supported_analyses"]
 
-        st.write(f"**Company:** {company['name']}")
+                st.write(f"**Company:** {company['name']}")
         st.write(f"**Ticker:** {company['ticker']}")
         st.write(f"**CIK:** {company['cik']}")
+
+        company_profile = support_result["company_profile"]
+
+        st.info(
+            f"**Company Profile:** {company_profile['profile']}\n\n"
+            f"**Analysis Fit:** {company_profile['fit']}\n\n"
+            f"{company_profile['interpretation']}"
+        )
 
         support_rows = []
         for analysis_name, details in supported.items():
