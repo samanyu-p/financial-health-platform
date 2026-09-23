@@ -1,3 +1,4 @@
+import subprocess
 import sys
 from pathlib import Path
 
@@ -13,12 +14,26 @@ from src.data.dynamic_company import analyze_ticker_support
 from src.models.dynamic_forecast import forecast_revenue_for_ticker
 
 
-DATA_PATH = "data/processed/company_comparison.csv"
-SCENARIO_PATH = "data/processed/walmart_scenario_analysis.csv"
+DATA_PATH = Path("data/processed/company_comparison.csv")
+SCENARIO_PATH = Path("data/processed/walmart_scenario_analysis.csv")
+
+
+def ensure_dashboard_data():
+    if DATA_PATH.exists():
+        return
+
+    st.warning("Dashboard data not found. Building data pipeline now...")
+
+    subprocess.run(
+        [sys.executable, "-m", "src.data.run_pipeline"],
+        check=True,
+    )
 
 
 @st.cache_data
 def load_data():
+    ensure_dashboard_data()
+
     df = pd.read_csv(DATA_PATH)
     df["end"] = pd.to_datetime(df["end"])
     df["year"] = df["end"].dt.year
@@ -59,12 +74,10 @@ def load_forecast_data():
 
 @st.cache_data
 def load_scenario_data():
-    path = Path(SCENARIO_PATH)
-
-    if not path.exists():
+    if not SCENARIO_PATH.exists():
         return pd.DataFrame()
 
-    df = pd.read_csv(path)
+    df = pd.read_csv(SCENARIO_PATH)
 
     df["revenue_billions"] = df["revenue"] / 1e9
     df["operating_income_billions"] = df["operating_income"] / 1e9
