@@ -597,6 +597,13 @@ def main():
 
     df = load_data()
 
+    st.download_button(
+        label="Download company comparison CSV",
+        data=df.to_csv(index=False),
+        file_name="company_comparison.csv",
+        mime="text/csv",
+    )
+
     st.subheader("Configured Company Dashboard")
 
     tickers = sorted(df["ticker"].dropna().unique())
