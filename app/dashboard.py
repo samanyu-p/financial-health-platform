@@ -185,6 +185,171 @@ def build_dynamic_export(profitability, free_cash_flow, forecast):
     return export_df.sort_values("year")
 
 
+def show_dynamic_profitability(profitability):
+    profitability = profitability.copy()
+    profitability["year"] = profitability["end"].dt.year
+    profitability["revenue_billions"] = profitability["revenue"] / 1e9
+
+    st.markdown("#### Revenue and Operating Margin")
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Bar(
+            x=profitability["year"],
+            y=profitability["revenue_billions"],
+            name="Revenue ($B)",
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=profitability["year"],
+            y=profitability["operating_margin"] * 100,
+            name="Operating Margin (%)",
+            mode="lines+markers",
+            yaxis="y2",
+        )
+    )
+
+    fig.update_layout(
+        xaxis_title="Fiscal Year",
+        yaxis=dict(title="Revenue ($B)"),
+        yaxis2=dict(
+            title="Operating Margin (%)",
+            overlaying="y",
+            side="right",
+        ),
+        legend=dict(orientation="h"),
+    )
+
+    st.plotly_chart(fig, width="stretch")
+
+    latest = profitability.sort_values("end").iloc[-1]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Latest Revenue", format_billions(latest["revenue"]))
+    col2.metric("Revenue Growth", format_percent(latest["revenue_growth"]))
+    col3.metric("Operating Margin", format_percent(latest["operating_margin"]))
+
+
+def show_dynamic_free_cash_flow(fcf):
+    fcf = fcf.copy()
+    fcf["year"] = fcf["end"].dt.year
+    fcf["operating_cash_flow_billions"] = fcf["operating_cash_flow"] / 1e9
+    fcf["capital_expenditures_billions"] = (
+        fcf["capital_expenditures"] / 1e9
+    )
+    fcf["free_cash_flow_billions"] = fcf["free_cash_flow"] / 1e9
+
+    st.markdown("#### Free Cash Flow")
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Bar(
+            x=fcf["year"],
+            y=fcf["operating_cash_flow_billions"],
+            name="Operating Cash Flow",
+        )
+    )
+
+    fig.add_trace(
+        go.Bar(
+            x=fcf["year"],
+            y=fcf["capital_expenditures_billions"],
+            name="CapEx",
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=fcf["year"],
+            y=fcf["free_cash_flow_billions"],
+            name="Free Cash Flow",
+            mode="lines+markers",
+        )
+    )
+
+    fig.update_layout(
+        xaxis_title="Fiscal Year",
+        yaxis_title="$B",
+        legend=dict(orientation="h"),
+    )
+
+    st.plotly_chart(fig, width="stretch")
+
+    latest_fcf = fcf.sort_values("end").iloc[-1]
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric(
+        "Operating Cash Flow",
+        format_billions(latest_fcf["operating_cash_flow"]),
+    )
+    col2.metric(
+        "CapEx",
+        format_billions(latest_fcf["capital_expenditures"]),
+    )
+    col3.metric(
+        "Free Cash Flow",
+        format_billions(latest_fcf["free_cash_flow"]),
+    )
+
+
+def show_dynamic_forecast(forecast, metrics):
+    st.markdown("#### Simple Revenue Forecast")
+
+    forecast_plot = forecast.copy()
+    forecast_plot["actual_revenue_billions"] = pd.to_numeric(
+        forecast_plot["actual_revenue_billions"],
+        errors="coerce",
+    )
+    forecast_plot["linear_trend_prediction"] = pd.to_numeric(
+        forecast_plot["linear_trend_prediction"],
+        errors="coerce",
+    )
+
+    fig = go.Figure()
+
+    fig.add_trace(
+        go.Scatter(
+            x=forecast_plot["year"],
+            y=forecast_plot["actual_revenue_billions"],
+            name="Actual Revenue",
+            mode="lines+markers",
+        )
+    )
+
+    fig.add_trace(
+        go.Scatter(
+            x=forecast_plot["year"],
+            y=forecast_plot["linear_trend_prediction"],
+            name="Linear Trend Forecast",
+            mode="lines+markers",
+            line=dict(dash="dash"),
+        )
+    )
+
+    fig.update_layout(
+        xaxis_title="Fiscal Year",
+        yaxis_title="Revenue ($B)",
+        legend=dict(orientation="h"),
+    )
+
+    st.plotly_chart(fig, width="stretch")
+
+    col1, col2, col3 = st.columns(3)
+    col1.metric("Linear MAE", f"{metrics['linear_mae']:.2f}B")
+    col2.metric("Linear RMSE", f"{metrics['linear_rmse']:.2f}B")
+    col3.metric("Linear MAPE", f"{metrics['linear_mape']:.2f}%")
+
+    st.caption(
+        "This is a simple baseline forecast. It is useful for learning "
+        "and comparison, but it should not be treated as a precise "
+        "investment prediction."
+    )
+
+
 def show_dynamic_ticker_section():
     st.subheader("Analyze Any SEC Ticker")
 
@@ -203,6 +368,7 @@ def show_dynamic_ticker_section():
         profitability_export = None
         fcf_export = None
         forecast_export = None
+        forecast_metrics = None
 
         with st.spinner(f"Checking SEC data for {ticker}..."):
             try:
@@ -218,6 +384,40 @@ def show_dynamic_ticker_section():
 
         company = support_result["company"]
         supported = support_result["supported_analyses"]
+
+        try:
+            profitability_result = analyze_dynamic_profitability(ticker)
+            if (
+                profitability_result is not None
+                and profitability_result["data"] is not None
+            ):
+                profitability_export = profitability_result["data"].copy()
+        except Exception as error:
+            profitability_result = {
+                "data": None,
+                "error": str(error),
+            }
+
+        try:
+            fcf_result = analyze_dynamic_free_cash_flow(ticker)
+            if fcf_result is not None and fcf_result["data"] is not None:
+                fcf_export = fcf_result["data"].copy()
+        except Exception as error:
+            fcf_result = {
+                "data": None,
+                "error": str(error),
+            }
+
+        try:
+            forecast_result = forecast_revenue_for_ticker(ticker)
+            forecast_export = forecast_result["forecast"].copy()
+            forecast_metrics = forecast_result["metrics"]
+        except Exception as error:
+            forecast_result = {
+                "forecast": None,
+                "metrics": None,
+                "error": str(error),
+            }
 
         st.write(f"**Company:** {company['name']}")
         st.write(f"**Ticker:** {company['ticker']}")
@@ -262,231 +462,6 @@ def show_dynamic_ticker_section():
             hide_index=True,
         )
 
-        st.info(
-            "Different industries report different SEC tags. A bank may support "
-            "revenue and profitability analysis but not retail working-capital "
-            "metrics like inventory days or cash conversion cycle."
-        )
-
-        try:
-            profitability_result = analyze_dynamic_profitability(ticker)
-
-            if (
-                profitability_result is None
-                or profitability_result["data"] is None
-            ):
-                error_message = (
-                    profitability_result["error"]
-                    if profitability_result is not None
-                    else "Profitability analysis is not available."
-                )
-                st.info(f"Profitability analysis unavailable: {error_message}")
-            else:
-                profitability = profitability_result["data"].copy()
-                profitability_export = profitability.copy()
-
-                profitability["year"] = profitability["end"].dt.year
-                profitability["revenue_billions"] = (
-                    profitability["revenue"] / 1e9
-                )
-
-                st.markdown("#### Revenue and Operating Margin")
-
-                fig = go.Figure()
-
-                fig.add_trace(
-                    go.Bar(
-                        x=profitability["year"],
-                        y=profitability["revenue_billions"],
-                        name="Revenue ($B)",
-                    )
-                )
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=profitability["year"],
-                        y=profitability["operating_margin"] * 100,
-                        name="Operating Margin (%)",
-                        mode="lines+markers",
-                        yaxis="y2",
-                    )
-                )
-
-                fig.update_layout(
-                    xaxis_title="Fiscal Year",
-                    yaxis=dict(title="Revenue ($B)"),
-                    yaxis2=dict(
-                        title="Operating Margin (%)",
-                        overlaying="y",
-                        side="right",
-                    ),
-                    legend=dict(orientation="h"),
-                )
-
-                st.plotly_chart(fig, width="stretch")
-
-                latest = profitability.sort_values("end").iloc[-1]
-
-                col1, col2, col3 = st.columns(3)
-                col1.metric(
-                    "Latest Revenue",
-                    format_billions(latest["revenue"]),
-                )
-                col2.metric(
-                    "Revenue Growth",
-                    format_percent(latest["revenue_growth"]),
-                )
-                col3.metric(
-                    "Operating Margin",
-                    format_percent(latest["operating_margin"]),
-                )
-
-        except Exception as error:
-            st.warning("Profitability analysis is not available for this ticker.")
-            st.code(str(error))
-
-        try:
-            fcf_result = analyze_dynamic_free_cash_flow(ticker)
-
-            if fcf_result is None or fcf_result["data"] is None:
-                error_message = (
-                    fcf_result["error"]
-                    if fcf_result is not None
-                    else "Free cash flow analysis is not available."
-                )
-                st.info(f"Free cash flow analysis unavailable: {error_message}")
-            else:
-                fcf = fcf_result["data"].copy()
-                fcf_export = fcf.copy()
-
-                fcf["year"] = fcf["end"].dt.year
-                fcf["operating_cash_flow_billions"] = (
-                    fcf["operating_cash_flow"] / 1e9
-                )
-                fcf["capital_expenditures_billions"] = (
-                    fcf["capital_expenditures"] / 1e9
-                )
-                fcf["free_cash_flow_billions"] = fcf["free_cash_flow"] / 1e9
-
-                st.markdown("#### Free Cash Flow")
-
-                fig = go.Figure()
-
-                fig.add_trace(
-                    go.Bar(
-                        x=fcf["year"],
-                        y=fcf["operating_cash_flow_billions"],
-                        name="Operating Cash Flow",
-                    )
-                )
-
-                fig.add_trace(
-                    go.Bar(
-                        x=fcf["year"],
-                        y=fcf["capital_expenditures_billions"],
-                        name="CapEx",
-                    )
-                )
-
-                fig.add_trace(
-                    go.Scatter(
-                        x=fcf["year"],
-                        y=fcf["free_cash_flow_billions"],
-                        name="Free Cash Flow",
-                        mode="lines+markers",
-                    )
-                )
-
-                fig.update_layout(
-                    xaxis_title="Fiscal Year",
-                    yaxis_title="$B",
-                    legend=dict(orientation="h"),
-                )
-
-                st.plotly_chart(fig, width="stretch")
-
-                latest_fcf = fcf.sort_values("end").iloc[-1]
-
-                col1, col2, col3 = st.columns(3)
-                col1.metric(
-                    "Operating Cash Flow",
-                    format_billions(latest_fcf["operating_cash_flow"]),
-                )
-                col2.metric(
-                    "CapEx",
-                    format_billions(latest_fcf["capital_expenditures"]),
-                )
-                col3.metric(
-                    "Free Cash Flow",
-                    format_billions(latest_fcf["free_cash_flow"]),
-                )
-
-        except Exception as error:
-            st.warning("Free cash flow analysis is not available for this ticker.")
-            st.code(str(error))
-
-        try:
-            forecast_result = forecast_revenue_for_ticker(ticker)
-            forecast = forecast_result["forecast"].copy()
-            forecast_export = forecast.copy()
-            metrics = forecast_result["metrics"]
-
-            st.markdown("#### Simple Revenue Forecast")
-
-            forecast_plot = forecast.copy()
-            forecast_plot["actual_revenue_billions"] = pd.to_numeric(
-                forecast_plot["actual_revenue_billions"],
-                errors="coerce",
-            )
-            forecast_plot["linear_trend_prediction"] = pd.to_numeric(
-                forecast_plot["linear_trend_prediction"],
-                errors="coerce",
-            )
-
-            fig = go.Figure()
-
-            fig.add_trace(
-                go.Scatter(
-                    x=forecast_plot["year"],
-                    y=forecast_plot["actual_revenue_billions"],
-                    name="Actual Revenue",
-                    mode="lines+markers",
-                )
-            )
-
-            fig.add_trace(
-                go.Scatter(
-                    x=forecast_plot["year"],
-                    y=forecast_plot["linear_trend_prediction"],
-                    name="Linear Trend Forecast",
-                    mode="lines+markers",
-                    line=dict(dash="dash"),
-                )
-            )
-
-            fig.update_layout(
-                xaxis_title="Fiscal Year",
-                yaxis_title="Revenue ($B)",
-                legend=dict(orientation="h"),
-            )
-
-            st.plotly_chart(fig, width="stretch")
-
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Linear MAE", f"{metrics['linear_mae']:.2f}B")
-            col2.metric("Linear RMSE", f"{metrics['linear_rmse']:.2f}B")
-            col3.metric("Linear MAPE", f"{metrics['linear_mape']:.2f}%")
-
-            st.caption(
-                "This is a simple baseline forecast. It is useful for learning "
-                "and comparison, but it should not be treated as a precise "
-                "investment prediction."
-            )
-
-        except Exception as error:
-            st.warning("Revenue forecasting is not available for this ticker.")
-            st.code(str(error))
-
         full_export = build_dynamic_export(
             profitability_export,
             fcf_export,
@@ -500,6 +475,39 @@ def show_dynamic_ticker_section():
                 file_name=f"{ticker.lower()}_full_analysis.csv",
                 mime="text/csv",
             )
+
+        st.info(
+            "Different industries report different SEC tags. A bank may support "
+            "revenue and profitability analysis but not retail working-capital "
+            "metrics like inventory days or cash conversion cycle."
+        )
+
+        if profitability_export is not None:
+            show_dynamic_profitability(profitability_export)
+        else:
+            error_message = profitability_result.get(
+                "error",
+                "Profitability analysis is not available.",
+            )
+            st.info(f"Profitability analysis unavailable: {error_message}")
+
+        if fcf_export is not None:
+            show_dynamic_free_cash_flow(fcf_export)
+        else:
+            error_message = fcf_result.get(
+                "error",
+                "Free cash flow analysis is not available.",
+            )
+            st.info(f"Free cash flow analysis unavailable: {error_message}")
+
+        if forecast_export is not None and forecast_metrics is not None:
+            show_dynamic_forecast(forecast_export, forecast_metrics)
+        else:
+            error_message = forecast_result.get(
+                "error",
+                "Revenue forecasting is not available.",
+            )
+            st.info(f"Revenue forecasting unavailable: {error_message}")
 
 
 def show_kpis(company_df):
