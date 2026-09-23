@@ -208,6 +208,20 @@ Important limitations:
 - Forecasts are simple baselines and should not be treated as precise predictions.
 - Scenario assumptions are illustrative and not company guidance.
 
+## Deployment
+
+This app can be deployed on Streamlit Community Cloud.
+
+High-level steps:
+
+1. Push the project to GitHub.
+2. Make the repository public or connect it privately to Streamlit Cloud.
+3. In Streamlit Cloud, create a new app from the repository.
+4. Set the app entry point to:
+
+```text
+app/dashboard.py
+
 ## Future Improvements
 
 Potential next steps:
