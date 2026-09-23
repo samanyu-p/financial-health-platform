@@ -118,7 +118,11 @@ def show_dynamic_ticker_section():
                 st.code(str(error))
                 return
 
-                company = support_result["company"]
+        if support_result is None:
+            st.error(f"Could not find SEC company data for ticker: {ticker}")
+            return
+
+        company = support_result["company"]
         supported = support_result["supported_analyses"]
 
         st.write(f"**Company:** {company['name']}")
