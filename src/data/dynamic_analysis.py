@@ -1,7 +1,7 @@
 import pandas as pd
 
-from src.data.dynamic_company import fetch_company_facts_by_ticker
 from src.data.check_tags import find_available_tags
+from src.data.dynamic_company import fetch_company_facts_by_ticker
 
 
 ANNUAL_DAYS_MIN = 300
@@ -112,6 +112,90 @@ def analyze_dynamic_profitability(ticker):
         "revenue_growth",
         "operating_income",
         "operating_margin",
+    ]
+
+    return {
+        "company": company,
+        "selected_tags": selected_tags,
+        "data": df[output_columns],
+        "error": None,
+    }
+
+
+def analyze_dynamic_free_cash_flow(ticker):
+    company, facts = fetch_company_facts_by_ticker(ticker)
+
+    if company is None:
+        return None
+
+    us_gaap = facts["facts"]["us-gaap"]
+    selected_tags = find_available_tags(us_gaap)
+
+    operating_cash_flow_tag = selected_tags["operating_cash_flow"]
+    capital_expenditures_tag = selected_tags["capital_expenditures"]
+
+    if operating_cash_flow_tag is None or capital_expenditures_tag is None:
+        return {
+            "company": company,
+            "selected_tags": selected_tags,
+            "data": None,
+            "error": (
+                "Operating cash flow or capital expenditures tag is missing."
+            ),
+        }
+
+    operating_cash_flow_records = get_usd_records(
+        us_gaap,
+        operating_cash_flow_tag,
+    )
+    capital_expenditures_records = get_usd_records(
+        us_gaap,
+        capital_expenditures_tag,
+    )
+
+    if (
+        operating_cash_flow_records is None
+        or capital_expenditures_records is None
+    ):
+        return {
+            "company": company,
+            "selected_tags": selected_tags,
+            "data": None,
+            "error": (
+                "Operating cash flow or capital expenditures USD records "
+                "are missing."
+            ),
+        }
+
+    operating_cash_flow = clean_duration_metric(
+        operating_cash_flow_records,
+        "operating_cash_flow",
+    )
+    capital_expenditures = clean_duration_metric(
+        capital_expenditures_records,
+        "capital_expenditures",
+    )
+
+    df = pd.merge(
+        operating_cash_flow,
+        capital_expenditures,
+        on="end",
+        how="inner",
+    )
+
+    df = df.sort_values("end")
+
+    df["free_cash_flow"] = (
+        df["operating_cash_flow"] - df["capital_expenditures"]
+    )
+    df["fcf_margin"] = df["free_cash_flow"] / df["operating_cash_flow"]
+
+    output_columns = [
+        "end",
+        "operating_cash_flow",
+        "capital_expenditures",
+        "free_cash_flow",
+        "fcf_margin",
     ]
 
     return {
