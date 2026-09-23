@@ -192,6 +192,81 @@ def build_dynamic_export(profitability, free_cash_flow, working_capital, forecas
     return export_df.sort_values("year")
 
 
+def show_dynamic_key_takeaways(
+    ticker,
+    profitability,
+    free_cash_flow,
+    working_capital,
+):
+    st.markdown("#### Key Takeaways")
+
+    takeaways = []
+
+    if profitability is not None and len(profitability) >= 2:
+        profitability = profitability.sort_values("end")
+        latest = profitability.iloc[-1]
+        prior = profitability.iloc[-2]
+
+        revenue_change = latest["revenue_growth"]
+        margin_change = latest["operating_margin"] - prior["operating_margin"]
+
+        if pd.notna(revenue_change):
+            direction = "increased" if revenue_change > 0 else "declined"
+            takeaways.append(
+                f"{ticker} revenue {direction} by "
+                f"{revenue_change * 100:.1f}% in the latest fiscal year."
+            )
+
+        margin_direction = "improved" if margin_change > 0 else "declined"
+        takeaways.append(
+            f"Operating margin {margin_direction} from "
+            f"{prior['operating_margin'] * 100:.1f}% to "
+            f"{latest['operating_margin'] * 100:.1f}%."
+        )
+    else:
+        takeaways.append(
+            "Revenue and operating margin takeaways are limited because "
+            "profitability data is unavailable or incomplete."
+        )
+
+    if free_cash_flow is not None and len(free_cash_flow) >= 2:
+        free_cash_flow = free_cash_flow.sort_values("end")
+        latest_fcf = free_cash_flow.iloc[-1]
+        prior_fcf = free_cash_flow.iloc[-2]
+
+        fcf_change = latest_fcf["free_cash_flow"] - prior_fcf["free_cash_flow"]
+        fcf_direction = "increased" if fcf_change > 0 else "declined"
+
+        takeaways.append(
+            f"Free cash flow {fcf_direction} in the latest fiscal year."
+        )
+    else:
+        takeaways.append(
+            "Free cash flow analysis is unavailable for this ticker because "
+            "the required SEC tags are missing or not appropriate."
+        )
+
+    if working_capital is not None:
+        if working_capital["ccc"].notna().any():
+            takeaways.append(
+                "Working-capital metrics are available, including cash "
+                "conversion cycle."
+            )
+        else:
+            takeaways.append(
+                "Partial working-capital metrics are available, but full cash "
+                "conversion cycle is limited."
+            )
+    else:
+        takeaways.append(
+            "Working-capital analysis is unavailable or not meaningful for "
+            "this company based on available SEC tags."
+        )
+
+    for takeaway in takeaways:
+        st.write(f"- {takeaway}")
+
+
 def show_dynamic_profitability(profitability):
     profitability = profitability.copy()
     profitability["year"] = profitability["end"].dt.year
@@ -274,7 +349,10 @@ def show_dynamic_free_cash_flow(fcf):
 
     latest_fcf = fcf.sort_values("end").iloc[-1]
     col1, col2, col3 = st.columns(3)
-    col1.metric("Operating Cash Flow", format_billions(latest_fcf["operating_cash_flow"]))
+    col1.metric(
+        "Operating Cash Flow",
+        format_billions(latest_fcf["operating_cash_flow"]),
+    )
     col2.metric("CapEx", format_billions(latest_fcf["capital_expenditures"]))
     col3.metric("Free Cash Flow", format_billions(latest_fcf["free_cash_flow"]))
 
@@ -435,7 +513,10 @@ def show_dynamic_ticker_section():
 
         try:
             profitability_result = analyze_dynamic_profitability(ticker)
-            if profitability_result is not None and profitability_result["data"] is not None:
+            if (
+                profitability_result is not None
+                and profitability_result["data"] is not None
+            ):
                 profitability_export = profitability_result["data"].copy()
         except Exception as error:
             profitability_result = {"data": None, "error": str(error)}
@@ -514,6 +595,13 @@ def show_dynamic_ticker_section():
                 file_name=f"{ticker.lower()}_full_analysis.csv",
                 mime="text/csv",
             )
+
+        show_dynamic_key_takeaways(
+            ticker,
+            profitability_export,
+            fcf_export,
+            working_capital_export,
+        )
 
         st.info(
             "Different industries report different SEC tags. A bank may support "
@@ -643,8 +731,22 @@ def show_working_capital_chart(company_df, selected_ticker):
     chart_df = company_df.copy()
 
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=chart_df["year"], y=chart_df["dio"], name="DIO", mode="lines+markers"))
-    fig.add_trace(go.Scatter(x=chart_df["year"], y=chart_df["dpo"], name="DPO", mode="lines+markers"))
+    fig.add_trace(
+        go.Scatter(
+            x=chart_df["year"],
+            y=chart_df["dio"],
+            name="DIO",
+            mode="lines+markers",
+        )
+    )
+    fig.add_trace(
+        go.Scatter(
+            x=chart_df["year"],
+            y=chart_df["dpo"],
+            name="DPO",
+            mode="lines+markers",
+        )
+    )
 
     if chart_df["ccc"].notna().any():
         fig.add_trace(
