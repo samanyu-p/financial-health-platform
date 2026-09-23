@@ -129,7 +129,21 @@ def show_dynamic_ticker_section():
         st.write(f"**Ticker:** {company['ticker']}")
         st.write(f"**CIK:** {company['cik']}")
 
-        company_profile = support_result["company_profile"]
+                company_profile = support_result.get(
+            "company_profile",
+            {
+                "profile": "General SEC reporting company",
+                "fit": (
+                    "Core revenue and profitability analysis may be available, "
+                    "but industry-specific metrics depend on reported SEC tags."
+                ),
+                "interpretation": (
+                    "This company can be analyzed using the SEC tags available "
+                    "in its filings. Some metrics may be unavailable if the "
+                    "company does not report the required data."
+                ),
+            },
+        )
 
         st.info(
             f"**Company Profile:** {company_profile['profile']}\n\n"
