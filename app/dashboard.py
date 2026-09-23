@@ -98,6 +98,93 @@ def section_divider():
     st.markdown("---")
 
 
+def build_dynamic_export(profitability, free_cash_flow, forecast):
+    export_df = None
+
+    if profitability is not None:
+        profitability_export = profitability.copy()
+        profitability_export["year"] = profitability_export["end"].dt.year
+
+        profitability_export = profitability_export[
+            [
+                "year",
+                "end",
+                "revenue",
+                "revenue_growth",
+                "operating_income",
+                "operating_margin",
+            ]
+        ]
+
+        export_df = profitability_export
+
+    if free_cash_flow is not None:
+        fcf_export = free_cash_flow.copy()
+        fcf_export["year"] = fcf_export["end"].dt.year
+
+        fcf_export = fcf_export[
+            [
+                "year",
+                "operating_cash_flow",
+                "capital_expenditures",
+                "free_cash_flow",
+                "fcf_margin",
+            ]
+        ]
+
+        if export_df is None:
+            export_df = fcf_export
+        else:
+            export_df = pd.merge(
+                export_df,
+                fcf_export,
+                on="year",
+                how="outer",
+            )
+
+    if forecast is not None:
+        forecast_export = forecast.copy()
+
+        forecast_export = forecast_export.rename(
+            columns={
+                "actual_revenue_billions": "actual_revenue_forecast_billions",
+                "linear_trend_prediction": "linear_trend_revenue_forecast_billions",
+            }
+        )
+
+        forecast_columns = [
+            "year",
+            "actual_revenue_forecast_billions",
+            "linear_trend_revenue_forecast_billions",
+            "data_type",
+        ]
+
+        if "naive_prediction" in forecast_export.columns:
+            forecast_export = forecast_export.rename(
+                columns={
+                    "naive_prediction": "naive_revenue_forecast_billions",
+                }
+            )
+            forecast_columns.insert(3, "naive_revenue_forecast_billions")
+
+        forecast_export = forecast_export[forecast_columns]
+
+        if export_df is None:
+            export_df = forecast_export
+        else:
+            export_df = pd.merge(
+                export_df,
+                forecast_export,
+                on="year",
+                how="outer",
+            )
+
+    if export_df is None:
+        return None
+
+    return export_df.sort_values("year")
+
+
 def show_dynamic_ticker_section():
     st.subheader("Analyze Any SEC Ticker")
 
@@ -113,6 +200,10 @@ def show_dynamic_ticker_section():
     ticker = ticker.upper().strip()
 
     if st.button("Analyze ticker"):
+        profitability_export = None
+        fcf_export = None
+        forecast_export = None
+
         with st.spinner(f"Checking SEC data for {ticker}..."):
             try:
                 support_result = analyze_ticker_support(ticker)
@@ -192,6 +283,8 @@ def show_dynamic_ticker_section():
                 st.info(f"Profitability analysis unavailable: {error_message}")
             else:
                 profitability = profitability_result["data"].copy()
+                profitability_export = profitability.copy()
+
                 profitability["year"] = profitability["end"].dt.year
                 profitability["revenue_billions"] = (
                     profitability["revenue"] / 1e9
@@ -234,13 +327,6 @@ def show_dynamic_ticker_section():
 
                 latest = profitability.sort_values("end").iloc[-1]
 
-                st.download_button(
-                    label=f"Download {ticker} profitability CSV",
-                    data=profitability.to_csv(index=False),
-                    file_name=f"{ticker.lower()}_profitability.csv",
-                    mime="text/csv",
-                )
-
                 col1, col2, col3 = st.columns(3)
                 col1.metric(
                     "Latest Revenue",
@@ -271,6 +357,8 @@ def show_dynamic_ticker_section():
                 st.info(f"Free cash flow analysis unavailable: {error_message}")
             else:
                 fcf = fcf_result["data"].copy()
+                fcf_export = fcf.copy()
+
                 fcf["year"] = fcf["end"].dt.year
                 fcf["operating_cash_flow_billions"] = (
                     fcf["operating_cash_flow"] / 1e9
@@ -319,13 +407,6 @@ def show_dynamic_ticker_section():
 
                 latest_fcf = fcf.sort_values("end").iloc[-1]
 
-                st.download_button(
-                    label=f"Download {ticker} free cash flow CSV",
-                    data=fcf.to_csv(index=False),
-                    file_name=f"{ticker.lower()}_free_cash_flow.csv",
-                    mime="text/csv",
-                )
-
                 col1, col2, col3 = st.columns(3)
                 col1.metric(
                     "Operating Cash Flow",
@@ -347,6 +428,7 @@ def show_dynamic_ticker_section():
         try:
             forecast_result = forecast_revenue_for_ticker(ticker)
             forecast = forecast_result["forecast"].copy()
+            forecast_export = forecast.copy()
             metrics = forecast_result["metrics"]
 
             st.markdown("#### Simple Revenue Forecast")
@@ -404,6 +486,20 @@ def show_dynamic_ticker_section():
         except Exception as error:
             st.warning("Revenue forecasting is not available for this ticker.")
             st.code(str(error))
+
+        full_export = build_dynamic_export(
+            profitability_export,
+            fcf_export,
+            forecast_export,
+        )
+
+        if full_export is not None:
+            st.download_button(
+                label=f"Download full {ticker} analysis CSV",
+                data=full_export.to_csv(index=False),
+                file_name=f"{ticker.lower()}_full_analysis.csv",
+                mime="text/csv",
+            )
 
 
 def show_kpis(company_df):
