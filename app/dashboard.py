@@ -129,7 +129,7 @@ def show_dynamic_ticker_section():
         st.write(f"**Ticker:** {company['ticker']}")
         st.write(f"**CIK:** {company['cik']}")
 
-                company_profile = support_result.get(
+        company_profile = support_result.get(
             "company_profile",
             {
                 "profile": "General SEC reporting company",
