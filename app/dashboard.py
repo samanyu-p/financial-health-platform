@@ -1,8 +1,14 @@
+import sys
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.append(str(PROJECT_ROOT))
 
 import pandas as pd
 import plotly.express as px
 import streamlit as st
+
+from src.data.dynamic_company import analyze_ticker_support
 
 
 DATA_PATH = "data/processed/company_comparison.csv"
@@ -90,22 +96,21 @@ def main():
     st.title("Corporate Financial Health Dashboard")
 
     st.caption(
-        "Retail-focused financial analysis using SEC Company Facts data. "
-        "Some metrics may be unavailable when companies do not report the "
-        "required XBRL tags."
+        "Retail-focused financial analysis using SEC Company Facts data, "
+        "with an expanding dynamic ticker compatibility checker."
     )
 
     with st.expander("Methodology and limitations"):
         st.markdown(
             """
             This dashboard uses SEC Company Facts data to compare financial
-            health across selected public retailers.
+            health across selected public retailers and to inspect support for
+            additional SEC-registered companies.
 
             **Current scope**
-            - The current analysis is retail-focused.
-            - Walmart, Target, and Costco are included as initial examples.
-            - The pipeline is designed to expand, but not every metric applies
-              to every company or industry.
+            - Walmart, Target, and Costco are included in the main comparison dataset.
+            - The broader ticker checker can inspect many SEC filers.
+            - Not every metric applies to every company or industry.
 
             **Key metrics**
             - Revenue growth shows how sales changed year over year.
@@ -120,13 +125,79 @@ def main():
             used by this project. Because DSO requires accounts receivable, full
             CCC is not calculated for those companies.
 
-            **Limitations**
-            SEC XBRL tags can vary across companies, industries, and filing years.
-            The project includes tag compatibility checks, but financial metrics
-            should still be reviewed before making conclusions. Forecasts and
-            scenarios are educational estimates, not investment advice.
+            **Industry limitations**
+            Retail-style working-capital metrics should not be blindly applied to
+            banks, insurers, or software companies. The ticker checker shows which
+            analyses are supported by available SEC tags, but business context is
+            still required.
+
+            **Forecast and scenario limitations**
+            Forecasts use simple baselines and should not be treated as precise
+            predictions. Scenario assumptions are illustrative and not company
+            guidance or investment advice.
             """
         )
+
+    st.subheader("Analyze Any SEC Ticker")
+
+    ticker_input = st.text_input(
+        "Enter a ticker to check supported analysis",
+        value="AAPL",
+        help="Examples: AAPL, JPM, MSFT, WMT",
+    )
+
+    if st.button("Check ticker"):
+        with st.spinner("Fetching SEC data and checking available tags..."):
+            result = analyze_ticker_support(ticker_input)
+
+        if result is None:
+            st.error(f"No SEC company found for ticker: {ticker_input}")
+        else:
+            company = result["company"]
+            selected_tags = result["selected_tags"]
+            supported_analyses = result["supported_analyses"]
+
+            st.success(
+                f"Found {company['name']} "
+                f"({company['ticker']}) | CIK {company['cik']}"
+            )
+
+            support_rows = []
+            for analysis_name, details in supported_analyses.items():
+                support_rows.append(
+                    {
+                        "analysis": analysis_name,
+                        "supported": details["is_supported"],
+                        "missing_metrics": ", ".join(
+                            details["missing_metrics"]
+                        ),
+                    }
+                )
+
+            support_df = pd.DataFrame(support_rows)
+
+            st.write("Supported analyses")
+            st.dataframe(support_df, use_container_width=True)
+
+            tag_rows = []
+            for metric, tag in selected_tags.items():
+                tag_rows.append(
+                    {
+                        "metric": metric,
+                        "selected_sec_tag": tag,
+                    }
+                )
+
+            tag_df = pd.DataFrame(tag_rows)
+
+            st.write("Selected SEC tags")
+            st.dataframe(tag_df, use_container_width=True)
+
+            st.caption(
+                "This panel checks whether the required SEC XBRL tags are "
+                "available. It does not mean every metric is meaningful for "
+                "every industry."
+            )
 
     df = load_data()
 
