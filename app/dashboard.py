@@ -10,6 +10,7 @@ import streamlit as st
 
 from src.data.dynamic_analysis import analyze_dynamic_profitability
 from src.data.dynamic_company import analyze_ticker_support
+from src.models.dynamic_forecast import forecast_revenue_for_ticker
 
 
 DATA_PATH = "data/processed/company_comparison.csv"
@@ -151,6 +152,7 @@ def main():
         with st.spinner("Fetching SEC data and checking available tags..."):
             support_result = analyze_ticker_support(ticker_input)
             profitability_result = analyze_dynamic_profitability(ticker_input)
+            forecast_result = forecast_revenue_for_ticker(ticker_input)
 
         if support_result is None:
             st.error(f"No SEC company found for ticker: {ticker_input}")
@@ -254,6 +256,79 @@ def main():
                     use_container_width=True,
                 )
 
+                if (
+                    forecast_result is not None
+                    and forecast_result["forecast"] is not None
+                ):
+                    st.write("Dynamic revenue forecast")
+
+                    dynamic_forecast = forecast_result["forecast"].copy()
+
+                    forecast_display = dynamic_forecast.melt(
+                        id_vars=["year", "data_type"],
+                        value_vars=[
+                            "actual_revenue_billions",
+                            "linear_trend_prediction",
+                        ],
+                        var_name="series",
+                        value_name="revenue_billions",
+                    )
+
+                    forecast_display = forecast_display.dropna(
+                        subset=["revenue_billions"]
+                    )
+
+                    dynamic_forecast_fig = px.line(
+                        forecast_display,
+                        x="year",
+                        y="revenue_billions",
+                        color="series",
+                        markers=True,
+                        title=f"{company['ticker']} Dynamic Revenue Forecast",
+                        labels={
+                            "year": "Fiscal Year",
+                            "revenue_billions": "Revenue ($B)",
+                            "series": "Series",
+                        },
+                    )
+
+                    st.plotly_chart(
+                        dynamic_forecast_fig,
+                        use_container_width=True,
+                    )
+
+                    metrics = forecast_result["metrics"]
+
+                    metric_1, metric_2, metric_3 = st.columns(3)
+
+                    with metric_1:
+                        st.metric(
+                            "Linear MAE",
+                            f"${metrics['linear_mae']:,.1f}B",
+                        )
+
+                    with metric_2:
+                        st.metric(
+                            "Linear MAPE",
+                            f"{metrics['linear_mape']:,.1f}%",
+                        )
+
+                    with metric_3:
+                        st.metric(
+                            "Naive MAPE",
+                            f"{metrics['naive_mape']:,.1f}%",
+                        )
+
+                    st.caption(
+                        "The forecast uses a simple linear trend and compares "
+                        "against a naive baseline. Lower error is better."
+                    )
+                elif forecast_result is not None:
+                    st.info(
+                        "Dynamic revenue forecast unavailable. "
+                        f"{forecast_result['error'] or ''}"
+                    )
+
                 st.write("Dynamic profitability data")
                 st.dataframe(dynamic_df, use_container_width=True)
             else:
@@ -269,8 +344,8 @@ def main():
 
             st.caption(
                 "This panel checks whether the required SEC XBRL tags are "
-                "available and runs dynamic profitability analysis when revenue "
-                "and operating income are available."
+                "available and runs dynamic profitability and forecasting when "
+                "the required data is available."
             )
 
     df = load_data()
