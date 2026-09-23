@@ -517,10 +517,10 @@ def show_scenario_analysis():
 
     st.subheader("Example Scenario Analysis: Walmart")
 
-st.caption(
-    "This scenario model is currently built only for Walmart. "
-    "Dynamic ticker-specific scenario analysis is a future improvement."
-)
+    st.caption(
+        "This scenario model is currently built only for Walmart. "
+        "Dynamic ticker-specific scenario analysis is a future improvement."
+    )
 
     display = scenario.copy()
 
