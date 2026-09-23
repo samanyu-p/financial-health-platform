@@ -14,6 +14,7 @@ sys.path.append(str(PROJECT_ROOT))
 from src.data.dynamic_analysis import (
     analyze_dynamic_free_cash_flow,
     analyze_dynamic_profitability,
+    analyze_dynamic_working_capital,
 )
 from src.data.dynamic_company import analyze_ticker_support
 from src.models.dynamic_forecast import forecast_revenue_for_ticker
@@ -98,13 +99,12 @@ def section_divider():
     st.markdown("---")
 
 
-def build_dynamic_export(profitability, free_cash_flow, forecast):
+def build_dynamic_export(profitability, free_cash_flow, working_capital, forecast):
     export_df = None
 
     if profitability is not None:
         profitability_export = profitability.copy()
         profitability_export["year"] = profitability_export["end"].dt.year
-
         profitability_export = profitability_export[
             [
                 "year",
@@ -115,13 +115,11 @@ def build_dynamic_export(profitability, free_cash_flow, forecast):
                 "operating_margin",
             ]
         ]
-
         export_df = profitability_export
 
     if free_cash_flow is not None:
         fcf_export = free_cash_flow.copy()
         fcf_export["year"] = fcf_export["end"].dt.year
-
         fcf_export = fcf_export[
             [
                 "year",
@@ -131,20 +129,36 @@ def build_dynamic_export(profitability, free_cash_flow, forecast):
                 "fcf_margin",
             ]
         ]
+        export_df = (
+            fcf_export
+            if export_df is None
+            else pd.merge(export_df, fcf_export, on="year", how="outer")
+        )
 
-        if export_df is None:
-            export_df = fcf_export
-        else:
-            export_df = pd.merge(
-                export_df,
-                fcf_export,
-                on="year",
-                how="outer",
-            )
+    if working_capital is not None:
+        wc_export = working_capital.copy()
+        wc_export["year"] = wc_export["end"].dt.year
+        wc_export = wc_export[
+            [
+                "year",
+                "cost_of_revenue",
+                "accounts_receivable",
+                "inventory",
+                "accounts_payable",
+                "dso",
+                "dio",
+                "dpo",
+                "ccc",
+            ]
+        ]
+        export_df = (
+            wc_export
+            if export_df is None
+            else pd.merge(export_df, wc_export, on="year", how="outer")
+        )
 
     if forecast is not None:
         forecast_export = forecast.copy()
-
         forecast_export = forecast_export.rename(
             columns={
                 "actual_revenue_billions": "actual_revenue_forecast_billions",
@@ -161,23 +175,16 @@ def build_dynamic_export(profitability, free_cash_flow, forecast):
 
         if "naive_prediction" in forecast_export.columns:
             forecast_export = forecast_export.rename(
-                columns={
-                    "naive_prediction": "naive_revenue_forecast_billions",
-                }
+                columns={"naive_prediction": "naive_revenue_forecast_billions"}
             )
             forecast_columns.insert(3, "naive_revenue_forecast_billions")
 
         forecast_export = forecast_export[forecast_columns]
-
-        if export_df is None:
-            export_df = forecast_export
-        else:
-            export_df = pd.merge(
-                export_df,
-                forecast_export,
-                on="year",
-                how="outer",
-            )
+        export_df = (
+            forecast_export
+            if export_df is None
+            else pd.merge(export_df, forecast_export, on="year", how="outer")
+        )
 
     if export_df is None:
         return None
@@ -193,7 +200,6 @@ def show_dynamic_profitability(profitability):
     st.markdown("#### Revenue and Operating Margin")
 
     fig = go.Figure()
-
     fig.add_trace(
         go.Bar(
             x=profitability["year"],
@@ -201,7 +207,6 @@ def show_dynamic_profitability(profitability):
             name="Revenue ($B)",
         )
     )
-
     fig.add_trace(
         go.Scatter(
             x=profitability["year"],
@@ -211,22 +216,16 @@ def show_dynamic_profitability(profitability):
             yaxis="y2",
         )
     )
-
     fig.update_layout(
         xaxis_title="Fiscal Year",
         yaxis=dict(title="Revenue ($B)"),
-        yaxis2=dict(
-            title="Operating Margin (%)",
-            overlaying="y",
-            side="right",
-        ),
+        yaxis2=dict(title="Operating Margin (%)", overlaying="y", side="right"),
         legend=dict(orientation="h"),
     )
 
     st.plotly_chart(fig, width="stretch")
 
     latest = profitability.sort_values("end").iloc[-1]
-
     col1, col2, col3 = st.columns(3)
     col1.metric("Latest Revenue", format_billions(latest["revenue"]))
     col2.metric("Revenue Growth", format_percent(latest["revenue_growth"]))
@@ -237,15 +236,12 @@ def show_dynamic_free_cash_flow(fcf):
     fcf = fcf.copy()
     fcf["year"] = fcf["end"].dt.year
     fcf["operating_cash_flow_billions"] = fcf["operating_cash_flow"] / 1e9
-    fcf["capital_expenditures_billions"] = (
-        fcf["capital_expenditures"] / 1e9
-    )
+    fcf["capital_expenditures_billions"] = fcf["capital_expenditures"] / 1e9
     fcf["free_cash_flow_billions"] = fcf["free_cash_flow"] / 1e9
 
     st.markdown("#### Free Cash Flow")
 
     fig = go.Figure()
-
     fig.add_trace(
         go.Bar(
             x=fcf["year"],
@@ -253,7 +249,6 @@ def show_dynamic_free_cash_flow(fcf):
             name="Operating Cash Flow",
         )
     )
-
     fig.add_trace(
         go.Bar(
             x=fcf["year"],
@@ -261,7 +256,6 @@ def show_dynamic_free_cash_flow(fcf):
             name="CapEx",
         )
     )
-
     fig.add_trace(
         go.Scatter(
             x=fcf["year"],
@@ -270,7 +264,6 @@ def show_dynamic_free_cash_flow(fcf):
             mode="lines+markers",
         )
     )
-
     fig.update_layout(
         xaxis_title="Fiscal Year",
         yaxis_title="$B",
@@ -280,20 +273,78 @@ def show_dynamic_free_cash_flow(fcf):
     st.plotly_chart(fig, width="stretch")
 
     latest_fcf = fcf.sort_values("end").iloc[-1]
-
     col1, col2, col3 = st.columns(3)
-    col1.metric(
-        "Operating Cash Flow",
-        format_billions(latest_fcf["operating_cash_flow"]),
+    col1.metric("Operating Cash Flow", format_billions(latest_fcf["operating_cash_flow"]))
+    col2.metric("CapEx", format_billions(latest_fcf["capital_expenditures"]))
+    col3.metric("Free Cash Flow", format_billions(latest_fcf["free_cash_flow"]))
+
+
+def show_dynamic_working_capital(working_capital):
+    wc = working_capital.copy()
+    wc["year"] = wc["end"].dt.year
+
+    st.markdown("#### Working Capital")
+
+    fig = go.Figure()
+
+    if wc["dso"].notna().any():
+        fig.add_trace(
+            go.Scatter(
+                x=wc["year"],
+                y=wc["dso"],
+                name="DSO",
+                mode="lines+markers",
+            )
+        )
+
+    fig.add_trace(
+        go.Scatter(
+            x=wc["year"],
+            y=wc["dio"],
+            name="DIO",
+            mode="lines+markers",
+        )
     )
-    col2.metric(
-        "CapEx",
-        format_billions(latest_fcf["capital_expenditures"]),
+
+    fig.add_trace(
+        go.Scatter(
+            x=wc["year"],
+            y=wc["dpo"],
+            name="DPO",
+            mode="lines+markers",
+        )
     )
-    col3.metric(
-        "Free Cash Flow",
-        format_billions(latest_fcf["free_cash_flow"]),
+
+    if wc["ccc"].notna().any():
+        fig.add_trace(
+            go.Scatter(
+                x=wc["year"],
+                y=wc["ccc"],
+                name="CCC",
+                mode="lines+markers",
+            )
+        )
+
+    fig.update_layout(
+        xaxis_title="Fiscal Year",
+        yaxis_title="Days",
+        legend=dict(orientation="h"),
     )
+
+    st.plotly_chart(fig, width="stretch")
+
+    latest_wc = wc.sort_values("end").iloc[-1]
+    col1, col2, col3, col4 = st.columns(4)
+    col1.metric("DSO", format_days(latest_wc["dso"]))
+    col2.metric("DIO", format_days(latest_wc["dio"]))
+    col3.metric("DPO", format_days(latest_wc["dpo"]))
+    col4.metric("CCC", format_days(latest_wc["ccc"]))
+
+    if wc["ccc"].isna().all():
+        st.info(
+            "Full cash conversion cycle is unavailable because accounts "
+            "receivable data is missing or not reported consistently."
+        )
 
 
 def show_dynamic_forecast(forecast, metrics):
@@ -310,7 +361,6 @@ def show_dynamic_forecast(forecast, metrics):
     )
 
     fig = go.Figure()
-
     fig.add_trace(
         go.Scatter(
             x=forecast_plot["year"],
@@ -319,7 +369,6 @@ def show_dynamic_forecast(forecast, metrics):
             mode="lines+markers",
         )
     )
-
     fig.add_trace(
         go.Scatter(
             x=forecast_plot["year"],
@@ -329,7 +378,6 @@ def show_dynamic_forecast(forecast, metrics):
             line=dict(dash="dash"),
         )
     )
-
     fig.update_layout(
         xaxis_title="Fiscal Year",
         yaxis_title="Revenue ($B)",
@@ -344,9 +392,8 @@ def show_dynamic_forecast(forecast, metrics):
     col3.metric("Linear MAPE", f"{metrics['linear_mape']:.2f}%")
 
     st.caption(
-        "This is a simple baseline forecast. It is useful for learning "
-        "and comparison, but it should not be treated as a precise "
-        "investment prediction."
+        "This is a simple baseline forecast. It is useful for learning and "
+        "comparison, but it should not be treated as a precise investment prediction."
     )
 
 
@@ -367,6 +414,7 @@ def show_dynamic_ticker_section():
     if st.button("Analyze ticker"):
         profitability_export = None
         fcf_export = None
+        working_capital_export = None
         forecast_export = None
         forecast_metrics = None
 
@@ -387,37 +435,31 @@ def show_dynamic_ticker_section():
 
         try:
             profitability_result = analyze_dynamic_profitability(ticker)
-            if (
-                profitability_result is not None
-                and profitability_result["data"] is not None
-            ):
+            if profitability_result is not None and profitability_result["data"] is not None:
                 profitability_export = profitability_result["data"].copy()
         except Exception as error:
-            profitability_result = {
-                "data": None,
-                "error": str(error),
-            }
+            profitability_result = {"data": None, "error": str(error)}
 
         try:
             fcf_result = analyze_dynamic_free_cash_flow(ticker)
             if fcf_result is not None and fcf_result["data"] is not None:
                 fcf_export = fcf_result["data"].copy()
         except Exception as error:
-            fcf_result = {
-                "data": None,
-                "error": str(error),
-            }
+            fcf_result = {"data": None, "error": str(error)}
+
+        try:
+            wc_result = analyze_dynamic_working_capital(ticker)
+            if wc_result is not None and wc_result["data"] is not None:
+                working_capital_export = wc_result["data"].copy()
+        except Exception as error:
+            wc_result = {"data": None, "error": str(error)}
 
         try:
             forecast_result = forecast_revenue_for_ticker(ticker)
             forecast_export = forecast_result["forecast"].copy()
             forecast_metrics = forecast_result["metrics"]
         except Exception as error:
-            forecast_result = {
-                "forecast": None,
-                "metrics": None,
-                "error": str(error),
-            }
+            forecast_result = {"forecast": None, "metrics": None, "error": str(error)}
 
         st.write(f"**Company:** {company['name']}")
         st.write(f"**Ticker:** {company['ticker']}")
@@ -456,15 +498,12 @@ def show_dynamic_ticker_section():
                 }
             )
 
-        st.dataframe(
-            pd.DataFrame(support_rows),
-            width="stretch",
-            hide_index=True,
-        )
+        st.dataframe(pd.DataFrame(support_rows), width="stretch", hide_index=True)
 
         full_export = build_dynamic_export(
             profitability_export,
             fcf_export,
+            working_capital_export,
             forecast_export,
         )
 
@@ -485,36 +524,40 @@ def show_dynamic_ticker_section():
         if profitability_export is not None:
             show_dynamic_profitability(profitability_export)
         else:
-            error_message = profitability_result.get(
-                "error",
-                "Profitability analysis is not available.",
+            st.info(
+                "Profitability analysis unavailable: "
+                + profitability_result.get("error", "Not available.")
             )
-            st.info(f"Profitability analysis unavailable: {error_message}")
 
         if fcf_export is not None:
             show_dynamic_free_cash_flow(fcf_export)
         else:
-            error_message = fcf_result.get(
-                "error",
-                "Free cash flow analysis is not available.",
+            st.info(
+                "Free cash flow analysis unavailable: "
+                + fcf_result.get("error", "Not available.")
             )
-            st.info(f"Free cash flow analysis unavailable: {error_message}")
+
+        if working_capital_export is not None:
+            show_dynamic_working_capital(working_capital_export)
+        else:
+            st.info(
+                "Working capital analysis unavailable: "
+                + wc_result.get("error", "Not available.")
+            )
 
         if forecast_export is not None and forecast_metrics is not None:
             show_dynamic_forecast(forecast_export, forecast_metrics)
         else:
-            error_message = forecast_result.get(
-                "error",
-                "Revenue forecasting is not available.",
+            st.info(
+                "Revenue forecasting unavailable: "
+                + forecast_result.get("error", "Not available.")
             )
-            st.info(f"Revenue forecasting unavailable: {error_message}")
 
 
 def show_kpis(company_df):
     latest = company_df.sort_values("end").iloc[-1]
 
     col1, col2, col3, col4 = st.columns(4)
-
     col1.metric("Revenue", format_billions(latest["revenue"]))
     col2.metric("Revenue Growth", format_percent(latest["revenue_growth"]))
     col3.metric("Operating Margin", format_percent(latest["operating_margin"]))
@@ -530,10 +573,7 @@ def show_revenue_chart(company_df, selected_ticker):
         x="year",
         y="revenue_billions",
         title=f"{selected_ticker} Revenue",
-        labels={
-            "year": "Fiscal Year",
-            "revenue_billions": "Revenue ($B)",
-        },
+        labels={"year": "Fiscal Year", "revenue_billions": "Revenue ($B)"},
     )
 
     st.plotly_chart(fig, width="stretch")
@@ -560,16 +600,13 @@ def show_margin_chart(company_df, selected_ticker):
 
 def show_cash_flow_chart(company_df, selected_ticker):
     chart_df = company_df.copy()
-    chart_df["operating_cash_flow_billions"] = (
-        chart_df["operating_cash_flow"] / 1e9
-    )
+    chart_df["operating_cash_flow_billions"] = chart_df["operating_cash_flow"] / 1e9
     chart_df["capital_expenditures_billions"] = (
         chart_df["capital_expenditures"] / 1e9
     )
     chart_df["free_cash_flow_billions"] = chart_df["free_cash_flow"] / 1e9
 
     fig = go.Figure()
-
     fig.add_trace(
         go.Bar(
             x=chart_df["year"],
@@ -577,7 +614,6 @@ def show_cash_flow_chart(company_df, selected_ticker):
             name="Operating Cash Flow",
         )
     )
-
     fig.add_trace(
         go.Bar(
             x=chart_df["year"],
@@ -585,7 +621,6 @@ def show_cash_flow_chart(company_df, selected_ticker):
             name="CapEx",
         )
     )
-
     fig.add_trace(
         go.Scatter(
             x=chart_df["year"],
@@ -594,7 +629,6 @@ def show_cash_flow_chart(company_df, selected_ticker):
             mode="lines+markers",
         )
     )
-
     fig.update_layout(
         title=f"{selected_ticker} Cash Flow",
         xaxis_title="Fiscal Year",
@@ -609,24 +643,8 @@ def show_working_capital_chart(company_df, selected_ticker):
     chart_df = company_df.copy()
 
     fig = go.Figure()
-
-    fig.add_trace(
-        go.Scatter(
-            x=chart_df["year"],
-            y=chart_df["dio"],
-            name="DIO",
-            mode="lines+markers",
-        )
-    )
-
-    fig.add_trace(
-        go.Scatter(
-            x=chart_df["year"],
-            y=chart_df["dpo"],
-            name="DPO",
-            mode="lines+markers",
-        )
-    )
+    fig.add_trace(go.Scatter(x=chart_df["year"], y=chart_df["dio"], name="DIO", mode="lines+markers"))
+    fig.add_trace(go.Scatter(x=chart_df["year"], y=chart_df["dpo"], name="DPO", mode="lines+markers"))
 
     if chart_df["ccc"].notna().any():
         fig.add_trace(
@@ -678,50 +696,25 @@ def show_company_comparison(df):
     ].copy()
 
     display["revenue"] = display["revenue"].apply(format_billions)
-    display["operating_margin"] = display["operating_margin"].apply(
-        format_percent
-    )
+    display["operating_margin"] = display["operating_margin"].apply(format_percent)
     display["dio"] = display["dio"].apply(format_days)
     display["dpo"] = display["dpo"].apply(format_days)
     display["ccc"] = display["ccc"].apply(format_days)
-    display["free_cash_flow"] = display["free_cash_flow"].apply(
-        format_billions
-    )
+    display["free_cash_flow"] = display["free_cash_flow"].apply(format_billions)
 
     st.dataframe(display, width="stretch", hide_index=True)
 
     chart_df = latest_by_company.copy()
     chart_df["revenue_billions"] = chart_df["revenue"] / 1e9
-    chart_df["free_cash_flow_billions"] = chart_df["free_cash_flow"] / 1e9
 
-    col1, col2 = st.columns(2)
-
-    with col1:
-        fig = px.bar(
-            chart_df,
-            x="ticker",
-            y="revenue_billions",
-            title="Latest Revenue by Company",
-            labels={
-                "ticker": "Ticker",
-                "revenue_billions": "Revenue ($B)",
-            },
-        )
-        st.plotly_chart(fig, width="stretch")
-
-    with col2:
-        fig = px.bar(
-            chart_df,
-            x="ticker",
-            y="operating_margin",
-            title="Latest Operating Margin by Company",
-            labels={
-                "ticker": "Ticker",
-                "operating_margin": "Operating Margin",
-            },
-        )
-        fig.update_yaxes(tickformat=".1%")
-        st.plotly_chart(fig, width="stretch")
+    fig = px.bar(
+        chart_df,
+        x="ticker",
+        y="revenue_billions",
+        title="Latest Revenue by Company",
+        labels={"ticker": "Ticker", "revenue_billions": "Revenue ($B)"},
+    )
+    st.plotly_chart(fig, width="stretch")
 
 
 def show_scenario_analysis():
@@ -732,7 +725,6 @@ def show_scenario_analysis():
         return
 
     st.subheader("Example Scenario Analysis: Walmart")
-
     st.caption(
         "This scenario model is currently built only for Walmart. "
         "Dynamic ticker-specific scenario analysis is a future improvement."
@@ -753,14 +745,10 @@ def show_scenario_analysis():
             display[column] = display[column].apply(format_billions)
 
     if "revenue_growth" in display.columns:
-        display["revenue_growth"] = display["revenue_growth"].apply(
-            format_percent
-        )
+        display["revenue_growth"] = display["revenue_growth"].apply(format_percent)
 
     if "operating_margin" in display.columns:
-        display["operating_margin"] = display["operating_margin"].apply(
-            format_percent
-        )
+        display["operating_margin"] = display["operating_margin"].apply(format_percent)
 
     st.dataframe(display, width="stretch", hide_index=True)
 
@@ -813,7 +801,6 @@ def main():
     )
 
     show_dynamic_ticker_section()
-
     section_divider()
 
     df = load_data()
@@ -855,15 +842,12 @@ def main():
         show_working_capital_chart(company_df, selected_ticker)
 
     section_divider()
-
     show_company_comparison(df)
 
     section_divider()
-
     show_scenario_analysis()
 
     section_divider()
-
     show_methodology()
 
 
