@@ -8,6 +8,7 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
+from src.data.dynamic_analysis import analyze_dynamic_profitability
 from src.data.dynamic_company import analyze_ticker_support
 
 
@@ -97,7 +98,7 @@ def main():
 
     st.caption(
         "Retail-focused financial analysis using SEC Company Facts data, "
-        "with an expanding dynamic ticker compatibility checker."
+        "with an expanding dynamic ticker analysis tool."
     )
 
     with st.expander("Methodology and limitations"):
@@ -109,7 +110,7 @@ def main():
 
             **Current scope**
             - Walmart, Target, and Costco are included in the main comparison dataset.
-            - The broader ticker checker can inspect many SEC filers.
+            - The broader ticker analyzer can inspect many SEC filers.
             - Not every metric applies to every company or industry.
 
             **Key metrics**
@@ -127,7 +128,7 @@ def main():
 
             **Industry limitations**
             Retail-style working-capital metrics should not be blindly applied to
-            banks, insurers, or software companies. The ticker checker shows which
+            banks, insurers, or software companies. The ticker analyzer shows which
             analyses are supported by available SEC tags, but business context is
             still required.
 
@@ -141,21 +142,22 @@ def main():
     st.subheader("Analyze Any SEC Ticker")
 
     ticker_input = st.text_input(
-        "Enter a ticker to check supported analysis",
+        "Enter a ticker to analyze",
         value="AAPL",
         help="Examples: AAPL, JPM, MSFT, WMT",
     )
 
-    if st.button("Check ticker"):
+    if st.button("Analyze ticker"):
         with st.spinner("Fetching SEC data and checking available tags..."):
-            result = analyze_ticker_support(ticker_input)
+            support_result = analyze_ticker_support(ticker_input)
+            profitability_result = analyze_dynamic_profitability(ticker_input)
 
-        if result is None:
+        if support_result is None:
             st.error(f"No SEC company found for ticker: {ticker_input}")
         else:
-            company = result["company"]
-            selected_tags = result["selected_tags"]
-            supported_analyses = result["supported_analyses"]
+            company = support_result["company"]
+            selected_tags = support_result["selected_tags"]
+            supported_analyses = support_result["supported_analyses"]
 
             st.success(
                 f"Found {company['name']} "
@@ -193,10 +195,82 @@ def main():
             st.write("Selected SEC tags")
             st.dataframe(tag_df, use_container_width=True)
 
+            if (
+                profitability_result is not None
+                and profitability_result["data"] is not None
+            ):
+                dynamic_df = profitability_result["data"].copy()
+                dynamic_df["year"] = pd.to_datetime(dynamic_df["end"]).dt.year
+                dynamic_df["revenue_billions"] = dynamic_df["revenue"] / 1e9
+                dynamic_df["operating_margin_percent"] = (
+                    dynamic_df["operating_margin"] * 100
+                )
+
+                latest_row = dynamic_df.sort_values("end").iloc[-1]
+
+                metric_col_1, metric_col_2 = st.columns(2)
+
+                with metric_col_1:
+                    st.metric(
+                        "Latest revenue",
+                        format_billions(latest_row["revenue"]),
+                    )
+
+                with metric_col_2:
+                    st.metric(
+                        "Latest operating margin",
+                        format_percent(latest_row["operating_margin"]),
+                    )
+
+                dynamic_revenue_fig = px.line(
+                    dynamic_df,
+                    x="year",
+                    y="revenue_billions",
+                    markers=True,
+                    title=f"{company['ticker']} Revenue",
+                    labels={
+                        "year": "Fiscal Year",
+                        "revenue_billions": "Revenue ($B)",
+                    },
+                )
+                st.plotly_chart(
+                    dynamic_revenue_fig,
+                    use_container_width=True,
+                )
+
+                dynamic_margin_fig = px.line(
+                    dynamic_df,
+                    x="year",
+                    y="operating_margin_percent",
+                    markers=True,
+                    title=f"{company['ticker']} Operating Margin",
+                    labels={
+                        "year": "Fiscal Year",
+                        "operating_margin_percent": "Operating Margin (%)",
+                    },
+                )
+                st.plotly_chart(
+                    dynamic_margin_fig,
+                    use_container_width=True,
+                )
+
+                st.write("Dynamic profitability data")
+                st.dataframe(dynamic_df, use_container_width=True)
+            else:
+                error = None
+
+                if profitability_result is not None:
+                    error = profitability_result["error"]
+
+                st.warning(
+                    "Dynamic profitability analysis is unavailable for this "
+                    f"ticker. {error or ''}"
+                )
+
             st.caption(
                 "This panel checks whether the required SEC XBRL tags are "
-                "available. It does not mean every metric is meaningful for "
-                "every industry."
+                "available and runs dynamic profitability analysis when revenue "
+                "and operating income are available."
             )
 
     df = load_data()
