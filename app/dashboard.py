@@ -215,7 +215,7 @@ def show_dynamic_ticker_section():
 
             st.plotly_chart(fig, width="stretch")
 
-                        latest = profitability.sort_values("end").iloc[-1]
+            latest = profitability.sort_values("end").iloc[-1]
 
             st.download_button(
                 label=f"Download {ticker} profitability CSV",
