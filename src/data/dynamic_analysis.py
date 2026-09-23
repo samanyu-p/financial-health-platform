@@ -7,6 +7,8 @@ from src.data.dynamic_company import fetch_company_facts_by_ticker
 ANNUAL_DAYS_MIN = 300
 ANNUAL_DAYS_MAX = 400
 
+# Dynamic analysis functions support the public Streamlit dashboard.
+
 
 def keep_latest_period_filing(df, duplicate_columns):
     df = df.copy()
