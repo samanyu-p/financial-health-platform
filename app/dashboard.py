@@ -611,7 +611,13 @@ def is_valid_ticker(ticker):
 def show_dynamic_ticker_section():
     st.subheader("Analyze Any SEC Ticker")
 
-        ticker_input = ticker_input.upper().strip()
+    ticker_input = st.text_input(
+        "Enter a ticker to analyze",
+        value=st.session_state.get("dynamic_ticker_input", "AAPL"),
+        help="Examples: AAPL, MSFT, JPM, WMT, COST, TGT",
+    )
+
+    ticker_input = ticker_input.upper().strip()
     analyze_clicked = st.button("Analyze ticker")
 
     if analyze_clicked and ticker_input:
@@ -631,14 +637,7 @@ def show_dynamic_ticker_section():
         st.info("Enter a ticker and click Analyze ticker to begin.")
         return
 
-    profitability_export = None
-    fcf_export = None
-    working_capital_export = None
-    forecast_export = None
-    forecast_metrics = None
-    scenario_export = None
-
-    with st.spinner(f"Checking SEC data for {ticker}..."):
+    with st.spinner(f"Analyzing SEC data for {ticker}..."):
         try:
             support_result = cached_ticker_support(ticker)
         except Exception as error:
@@ -647,49 +646,11 @@ def show_dynamic_ticker_section():
             return
 
     if support_result is None:
-        st.error(f"Could not find SEC company data for ticker: {ticker}")
+        st.error("Ticker not found in SEC company ticker data.")
         return
 
     company = support_result["company"]
     supported = support_result["supported_analyses"]
-
-    try:
-        profitability_result = cached_dynamic_profitability(ticker)
-        if (
-            profitability_result is not None
-            and profitability_result["data"] is not None
-        ):
-            profitability_export = profitability_result["data"].copy()
-    except Exception as error:
-        profitability_result = {"data": None, "error": str(error)}
-
-    try:
-        fcf_result = cached_dynamic_free_cash_flow(ticker)
-        if fcf_result is not None and fcf_result["data"] is not None:
-            fcf_export = fcf_result["data"].copy()
-    except Exception as error:
-        fcf_result = {"data": None, "error": str(error)}
-
-    try:
-        wc_result = cached_dynamic_working_capital(ticker)
-        if wc_result is not None and wc_result["data"] is not None:
-            working_capital_export = wc_result["data"].copy()
-    except Exception as error:
-        wc_result = {"data": None, "error": str(error)}
-
-    try:
-        forecast_result = cached_revenue_forecast(ticker)
-        forecast_export = forecast_result["forecast"].copy()
-        forecast_metrics = forecast_result["metrics"]
-    except Exception as error:
-        forecast_result = {"forecast": None, "metrics": None, "error": str(error)}
-
-    try:
-        scenario_result = cached_dynamic_scenarios(ticker)
-        if scenario_result is not None and scenario_result["data"] is not None:
-            scenario_export = scenario_result["data"].copy()
-    except Exception as error:
-        scenario_result = {"data": None, "error": str(error)}
 
     st.write(f"**Company:** {company['name']}")
     st.write(f"**Ticker:** {company['ticker']}")
@@ -698,15 +659,11 @@ def show_dynamic_ticker_section():
     company_profile = support_result.get(
         "company_profile",
         {
-            "profile": "General SEC reporting company",
-            "fit": (
-                "Core revenue and profitability analysis may be available, "
-                "but industry-specific metrics depend on reported SEC tags."
-            ),
+            "profile": "Unknown",
+            "fit": "Analysis fit could not be determined.",
             "interpretation": (
-                "This company can be analyzed using the SEC tags available "
-                "in its filings. Some metrics may be unavailable if the "
-                "company does not report the required data."
+                "SEC reporting varies by company, so some metrics may not be "
+                "available for this ticker."
             ),
         },
     )
@@ -728,101 +685,231 @@ def show_dynamic_ticker_section():
             }
         )
 
-    st.dataframe(pd.DataFrame(support_rows), width="stretch", hide_index=True)
+    support_df = pd.DataFrame(support_rows)
+    st.dataframe(support_df, width="stretch", hide_index=True)
 
-    selected_tags = support_result.get("selected_tags", {})
+    dynamic_exports = []
 
-    tag_rows = []
-    for metric, tag in selected_tags.items():
-        tag_rows.append(
-            {
-                "Metric": metric,
-                "SEC tag used": tag if tag is not None else "Not available",
-            }
+    profitability_result = cached_dynamic_profitability(ticker)
+    if profitability_result and profitability_result["data"] is not None:
+        profitability = profitability_result["data"].copy()
+        latest_profitability = profitability.iloc[-1]
+
+        st.markdown("### Revenue and Operating Margin")
+
+        col1, col2 = st.columns(2)
+        col1.metric("Latest Revenue", format_currency(latest_profitability["revenue"]))
+        col2.metric(
+            "Latest Operating Margin",
+            format_percent(latest_profitability["operating_margin"]),
         )
 
-    with st.expander("View SEC tags used for this analysis"):
-        st.dataframe(
-            pd.DataFrame(tag_rows),
-            width="stretch",
-            hide_index=True,
+        revenue_chart_data = profitability.copy()
+        revenue_chart_data["revenue_billions"] = revenue_chart_data["revenue"] / 1e9
+
+        fig_revenue = px.line(
+            revenue_chart_data,
+            x="end",
+            y="revenue_billions",
+            markers=True,
+            title=f"{ticker} Revenue",
+        )
+        fig_revenue.update_layout(yaxis_title="Revenue ($B)")
+        st.plotly_chart(fig_revenue, width="stretch")
+
+        fig_margin = px.line(
+            profitability,
+            x="end",
+            y="operating_margin",
+            markers=True,
+            title=f"{ticker} Operating Margin",
+        )
+        fig_margin.update_layout(yaxis_tickformat=".1%")
+        st.plotly_chart(fig_margin, width="stretch")
+
+        export_profitability = profitability.copy()
+        export_profitability.insert(0, "section", "profitability")
+        dynamic_exports.append(export_profitability)
+    else:
+        st.warning("Profitability analysis is not available for this ticker.")
+
+    free_cash_flow_result = cached_dynamic_free_cash_flow(ticker)
+    if free_cash_flow_result and free_cash_flow_result["data"] is not None:
+        fcf = free_cash_flow_result["data"].copy()
+        latest_fcf = fcf.iloc[-1]
+
+        st.markdown("### Free Cash Flow")
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric(
+            "Operating Cash Flow",
+            format_currency(latest_fcf["operating_cash_flow"]),
+        )
+        col2.metric(
+            "Capital Expenditures",
+            format_currency(latest_fcf["capital_expenditures"]),
+        )
+        col3.metric("Free Cash Flow", format_currency(latest_fcf["free_cash_flow"]))
+
+        fcf_chart_data = fcf.copy()
+        fcf_chart_data["free_cash_flow_billions"] = (
+            fcf_chart_data["free_cash_flow"] / 1e9
         )
 
-    full_export = build_dynamic_export(
-        profitability_export,
-        fcf_export,
-        working_capital_export,
-        forecast_export,
-    )
+        fig_fcf = px.line(
+            fcf_chart_data,
+            x="end",
+            y="free_cash_flow_billions",
+            markers=True,
+            title=f"{ticker} Free Cash Flow",
+        )
+        fig_fcf.update_layout(yaxis_title="Free Cash Flow ($B)")
+        st.plotly_chart(fig_fcf, width="stretch")
 
-    if scenario_export is not None:
-        scenario_for_export = scenario_export.copy()
-        scenario_for_export["year"] = scenario_for_export["scenario_year"]
-        scenario_for_export = scenario_for_export.add_prefix("scenario_")
-        scenario_for_export = scenario_for_export.rename(
-            columns={"scenario_year": "year"}
+        export_fcf = fcf.copy()
+        export_fcf.insert(0, "section", "free_cash_flow")
+        dynamic_exports.append(export_fcf)
+    else:
+        st.info("Free cash flow analysis is not available for this ticker.")
+
+    working_capital_result = cached_dynamic_working_capital(ticker)
+    if working_capital_result and working_capital_result["data"] is not None:
+        working_capital = working_capital_result["data"].copy()
+
+        st.markdown("### Working Capital")
+
+        latest_working_capital = working_capital.iloc[-1]
+
+        col1, col2, col3 = st.columns(3)
+        col1.metric("DIO", format_number(latest_working_capital.get("dio")))
+        col2.metric("DPO", format_number(latest_working_capital.get("dpo")))
+        col3.metric("CCC", format_number(latest_working_capital.get("ccc")))
+
+        working_capital_chart = working_capital[
+            ["end", "dio", "dpo", "ccc"]
+        ].melt(
+            id_vars="end",
+            var_name="Metric",
+            value_name="Days",
         )
 
-    if full_export is not None:
+        fig_wc = px.line(
+            working_capital_chart,
+            x="end",
+            y="Days",
+            color="Metric",
+            markers=True,
+            title=f"{ticker} Working Capital Days",
+        )
+        st.plotly_chart(fig_wc, width="stretch")
+
+        export_wc = working_capital.copy()
+        export_wc.insert(0, "section", "working_capital")
+        dynamic_exports.append(export_wc)
+    else:
+        st.info("Working capital analysis is not available for this ticker.")
+
+    forecast_result = cached_revenue_forecast(ticker)
+    if forecast_result and forecast_result["forecast"] is not None:
+        forecast = forecast_result["forecast"].copy()
+
+        st.markdown("### Revenue Forecast")
+
+        metrics = forecast_result["metrics"]
+
+        col1, col2 = st.columns(2)
+        col1.metric("Linear Trend MAPE", f"{metrics['linear_mape']:.1f}%")
+        col2.metric("Naive Baseline MAPE", f"{metrics['naive_mape']:.1f}%")
+
+        forecast_chart = forecast.copy()
+        forecast_chart["actual_revenue_billions"] = pd.to_numeric(
+            forecast_chart["actual_revenue_billions"],
+            errors="coerce",
+        )
+        forecast_chart["linear_trend_prediction"] = pd.to_numeric(
+            forecast_chart["linear_trend_prediction"],
+            errors="coerce",
+        )
+
+        fig_forecast = go.Figure()
+        fig_forecast.add_trace(
+            go.Scatter(
+                x=forecast_chart["year"],
+                y=forecast_chart["actual_revenue_billions"],
+                mode="lines+markers",
+                name="Actual Revenue",
+            )
+        )
+        fig_forecast.add_trace(
+            go.Scatter(
+                x=forecast_chart["year"],
+                y=forecast_chart["linear_trend_prediction"],
+                mode="lines+markers",
+                name="Linear Trend Forecast",
+            )
+        )
+        fig_forecast.update_layout(
+            title=f"{ticker} Revenue Forecast",
+            xaxis_title="Year",
+            yaxis_title="Revenue ($B)",
+        )
+        st.plotly_chart(fig_forecast, width="stretch")
+
+        export_forecast = forecast.copy()
+        export_forecast.insert(0, "section", "revenue_forecast")
+        dynamic_exports.append(export_forecast)
+    else:
+        st.info("Revenue forecast is not available for this ticker.")
+
+    scenario_result = cached_dynamic_scenarios(ticker)
+    if scenario_result and scenario_result["data"] is not None:
+        scenario = scenario_result["data"].copy()
+
+        st.markdown("### Scenario Analysis")
+
+        display = scenario.copy()
+        dollar_columns = [
+            "revenue",
+            "operating_income",
+            "operating_cash_flow",
+            "capital_expenditures",
+            "free_cash_flow",
+        ]
+
+        for column in dollar_columns:
+            if column in display.columns:
+                display[column] = display[column] / 1e9
+
+        st.dataframe(display, width="stretch", hide_index=True)
+
         st.download_button(
-            label=f"Download full {ticker} analysis CSV",
-            data=full_export.to_csv(index=False),
-            file_name=f"{ticker.lower()}_full_analysis.csv",
+            label=f"Download {ticker} scenario analysis CSV",
+            data=scenario.to_csv(index=False),
+            file_name=f"{ticker.lower()}_scenario_analysis.csv",
             mime="text/csv",
         )
 
-    show_dynamic_key_takeaways(
-        ticker,
-        profitability_export,
-        fcf_export,
-        working_capital_export,
-    )
+        export_scenario = scenario.copy()
+        export_scenario.insert(0, "section", "scenario_analysis")
+        dynamic_exports.append(export_scenario)
+    else:
+        st.info("Scenario analysis is not available for this ticker.")
+
+    if dynamic_exports:
+        combined_export = pd.concat(dynamic_exports, ignore_index=True, sort=False)
+
+        st.download_button(
+            label=f"Download full {ticker} analysis CSV",
+            data=combined_export.to_csv(index=False),
+            file_name=f"{ticker.lower()}_dynamic_analysis.csv",
+            mime="text/csv",
+        )
 
     st.info(
         "Different industries report different SEC tags. A bank may support "
         "revenue and profitability analysis but not retail working-capital "
         "metrics like inventory days or cash conversion cycle."
     )
-
-    if profitability_export is not None:
-        show_dynamic_profitability(profitability_export)
-    else:
-        st.info(
-            "Profitability analysis unavailable: "
-            + profitability_result.get("error", "Not available.")
-        )
-
-    if fcf_export is not None:
-        show_dynamic_free_cash_flow(fcf_export)
-    else:
-        st.info(
-            "Free cash flow analysis unavailable: "
-            + fcf_result.get("error", "Not available.")
-        )
-
-    if working_capital_export is not None:
-        show_dynamic_working_capital(working_capital_export)
-    else:
-        st.info(
-            "Working capital analysis unavailable: "
-            + wc_result.get("error", "Not available.")
-        )
-
-    if forecast_export is not None and forecast_metrics is not None:
-        show_dynamic_forecast(forecast_export, forecast_metrics)
-    else:
-        st.info(
-            "Revenue forecasting unavailable: "
-            + forecast_result.get("error", "Not available.")
-        )
-
-    if scenario_export is not None:
-        show_dynamic_scenarios(scenario_export)
-    else:
-        st.info(
-            "Dynamic scenario analysis unavailable: "
-            + scenario_result.get("error", "Not available.")
-        )
 
 
 def show_kpis(company_df):
