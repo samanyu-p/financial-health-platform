@@ -773,6 +773,58 @@ def show_working_capital_chart(company_df, selected_ticker):
             "not report all required SEC tags, usually accounts receivable."
         )
 
+def show_multi_company_metric_trend(df):
+    st.subheader("Multi-Company Metric Trend")
+
+    metric_options = {
+        "Revenue": "revenue",
+        "Revenue Growth": "revenue_growth",
+        "Operating Margin": "operating_margin",
+        "Free Cash Flow": "free_cash_flow",
+        "DIO": "dio",
+        "DPO": "dpo",
+        "CCC": "ccc",
+    }
+
+    selected_metric_label = st.selectbox(
+        "Select a metric to compare",
+        list(metric_options.keys()),
+    )
+
+    selected_metric = metric_options[selected_metric_label]
+
+    chart_df = df.copy()
+
+    if selected_metric in ["revenue", "free_cash_flow"]:
+        chart_df[selected_metric] = chart_df[selected_metric] / 1e9
+        y_label = f"{selected_metric_label} ($B)"
+    elif selected_metric in ["revenue_growth", "operating_margin"]:
+        chart_df[selected_metric] = chart_df[selected_metric] * 100
+        y_label = f"{selected_metric_label} (%)"
+    else:
+        y_label = f"{selected_metric_label} (Days)"
+
+    fig = px.line(
+        chart_df,
+        x="year",
+        y=selected_metric,
+        color="ticker",
+        markers=True,
+        title=f"{selected_metric_label} by Company",
+        labels={
+            "year": "Fiscal Year",
+            selected_metric: y_label,
+            "ticker": "Ticker",
+        },
+    )
+
+    st.plotly_chart(fig, width="stretch")
+
+    st.caption(
+        "Companies may have different fiscal year-end dates and different SEC "
+        "tag availability. Missing values are left blank instead of forcing a "
+        "misleading comparison."
+    )
 
 def show_company_comparison(df):
     st.subheader("Company Comparison")
@@ -953,6 +1005,9 @@ def main():
 
         with col4:
             show_working_capital_chart(company_df, selected_ticker)
+
+        section_divider()
+        show_multi_company_metric_trend(df)
 
         section_divider()
         show_company_comparison(df)
