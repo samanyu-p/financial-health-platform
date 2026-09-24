@@ -18,6 +18,7 @@ from src.data.dynamic_analysis import (
 )
 from src.data.dynamic_company import analyze_ticker_support
 from src.models.dynamic_forecast import forecast_revenue_for_ticker
+from src.models.dynamic_scenario import analyze_dynamic_scenarios
 
 
 DATA_PATH = Path("data/processed/company_comparison.csv")
@@ -97,6 +98,11 @@ def cached_dynamic_working_capital(ticker):
 @st.cache_data(ttl=3600)
 def cached_revenue_forecast(ticker):
     return forecast_revenue_for_ticker(ticker)
+
+
+@st.cache_data(ttl=3600)
+def cached_dynamic_scenarios(ticker):
+    return analyze_dynamic_scenarios(ticker)
 
 
 def format_billions(value):
@@ -500,6 +506,83 @@ def show_dynamic_forecast(forecast, metrics):
     )
 
 
+def show_dynamic_scenarios(scenarios):
+    st.markdown("#### Dynamic Scenario Analysis")
+
+    scenario_df = scenarios.copy()
+
+    display = scenario_df.copy()
+
+    dollar_columns = [
+        "revenue",
+        "operating_income",
+        "operating_cash_flow",
+        "capital_expenditures",
+        "free_cash_flow",
+    ]
+
+    for column in dollar_columns:
+        if column in display.columns:
+            display[column] = display[column].apply(format_billions)
+
+    if "revenue_growth" in display.columns:
+        display["revenue_growth"] = display["revenue_growth"].apply(
+            format_percent
+        )
+
+    if "operating_margin" in display.columns:
+        display["operating_margin"] = display["operating_margin"].apply(
+            format_percent
+        )
+
+    st.dataframe(display, width="stretch", hide_index=True)
+
+    chart_df = scenario_df.copy()
+    chart_df["revenue_billions"] = chart_df["revenue"] / 1e9
+
+    fig = px.bar(
+        chart_df,
+        x="scenario",
+        y="revenue_billions",
+        title="Scenario Revenue",
+        labels={
+            "scenario": "Scenario",
+            "revenue_billions": "Revenue ($B)",
+        },
+    )
+
+    st.plotly_chart(fig, width="stretch")
+
+    if scenario_df["fcf_available"].any():
+        fcf_chart = scenario_df[scenario_df["fcf_available"]].copy()
+        fcf_chart["free_cash_flow_billions"] = (
+            fcf_chart["free_cash_flow"] / 1e9
+        )
+
+        fig = px.bar(
+            fcf_chart,
+            x="scenario",
+            y="free_cash_flow_billions",
+            title="Scenario Free Cash Flow",
+            labels={
+                "scenario": "Scenario",
+                "free_cash_flow_billions": "Free Cash Flow ($B)",
+            },
+        )
+
+        st.plotly_chart(fig, width="stretch")
+    else:
+        st.info(
+            "Free cash flow scenario outputs are unavailable because operating "
+            "cash flow or CapEx data is missing for this ticker."
+        )
+
+    st.caption(
+        "Scenarios are simple illustrative cases based on recent historical "
+        "averages. They are not company guidance or investment advice."
+    )
+
+
 def show_dynamic_ticker_section():
     st.subheader("Analyze Any SEC Ticker")
 
@@ -510,7 +593,6 @@ def show_dynamic_ticker_section():
     )
 
     ticker_input = ticker_input.upper().strip()
-
     analyze_clicked = st.button("Analyze ticker")
 
     if analyze_clicked and ticker_input:
@@ -528,6 +610,7 @@ def show_dynamic_ticker_section():
     working_capital_export = None
     forecast_export = None
     forecast_metrics = None
+    scenario_export = None
 
     with st.spinner(f"Checking SEC data for {ticker}..."):
         try:
@@ -575,6 +658,13 @@ def show_dynamic_ticker_section():
     except Exception as error:
         forecast_result = {"forecast": None, "metrics": None, "error": str(error)}
 
+    try:
+        scenario_result = cached_dynamic_scenarios(ticker)
+        if scenario_result is not None and scenario_result["data"] is not None:
+            scenario_export = scenario_result["data"].copy()
+    except Exception as error:
+        scenario_result = {"data": None, "error": str(error)}
+
     st.write(f"**Company:** {company['name']}")
     st.write(f"**Ticker:** {company['ticker']}")
     st.write(f"**CIK:** {company['cik']}")
@@ -620,6 +710,14 @@ def show_dynamic_ticker_section():
         working_capital_export,
         forecast_export,
     )
+
+    if scenario_export is not None:
+        scenario_for_export = scenario_export.copy()
+        scenario_for_export["year"] = scenario_for_export["scenario_year"]
+        scenario_for_export = scenario_for_export.add_prefix("scenario_")
+        scenario_for_export = scenario_for_export.rename(
+            columns={"scenario_year": "year"}
+        )
 
     if full_export is not None:
         st.download_button(
@@ -672,6 +770,14 @@ def show_dynamic_ticker_section():
         st.info(
             "Revenue forecasting unavailable: "
             + forecast_result.get("error", "Not available.")
+        )
+
+    if scenario_export is not None:
+        show_dynamic_scenarios(scenario_export)
+    else:
+        st.info(
+            "Dynamic scenario analysis unavailable: "
+            + scenario_result.get("error", "Not available.")
         )
 
 
