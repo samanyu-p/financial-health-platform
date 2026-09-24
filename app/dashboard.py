@@ -1316,6 +1316,61 @@ def show_data_quality_summary(df):
         "that supports full cash conversion cycle analysis."
     )
 
+def show_metric_dictionary():
+    st.subheader("Metric Dictionary")
+
+    metric_rows = [
+        {
+            "Metric": "Revenue",
+            "Formula": "Reported company revenue",
+            "Best Used For": "Business scale and growth context",
+        },
+        {
+            "Metric": "Revenue Growth",
+            "Formula": "Current revenue / prior revenue - 1",
+            "Best Used For": "Measuring year-over-year expansion or decline",
+        },
+        {
+            "Metric": "Operating Margin",
+            "Formula": "Operating income / revenue",
+            "Best Used For": "Comparing operating profitability within similar industries",
+        },
+        {
+            "Metric": "Free Cash Flow",
+            "Formula": "Operating cash flow - capital expenditures",
+            "Best Used For": "Understanding cash left after reinvestment needs",
+        },
+        {
+            "Metric": "DSO",
+            "Formula": "Average accounts receivable / revenue * 365",
+            "Best Used For": "Companies where customer receivables are meaningful",
+        },
+        {
+            "Metric": "DIO",
+            "Formula": "Average inventory / cost of revenue * 365",
+            "Best Used For": "Inventory-heavy companies such as retailers or manufacturers",
+        },
+        {
+            "Metric": "DPO",
+            "Formula": "Average accounts payable / cost of revenue * 365",
+            "Best Used For": "Companies with meaningful supplier payables",
+        },
+        {
+            "Metric": "CCC",
+            "Formula": "DSO + DIO - DPO",
+            "Best Used For": "Inventory-heavy operating businesses",
+        },
+    ]
+
+    metric_df = pd.DataFrame(metric_rows)
+
+    st.dataframe(metric_df, width="stretch", hide_index=True)
+
+    st.info(
+        "Metrics should be interpreted by industry. For example, CCC is useful "
+        "for retailers but usually not appropriate for banks or insurers."
+    )
+
 def main():
     ensure_dashboard_data()
 
@@ -1398,6 +1453,7 @@ def main():
 
     with methodology_tab:
         show_methodology()
+        show_metric_dictionary()
         show_data_quality_summary(df)
 
 
