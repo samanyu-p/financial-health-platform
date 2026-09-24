@@ -898,60 +898,70 @@ def main():
 
     st.title("Corporate Financial Health Dashboard")
     st.write(
-        "Retail-focused financial analysis using SEC Company Facts data, with "
-        "an expanding dynamic ticker analysis tool."
+        "Financial analysis using SEC Company Facts data, with dynamic ticker "
+        "analysis, company comparison, forecasting, and business-model-aware "
+        "metric guidance."
     )
 
-    show_dynamic_ticker_section()
-    section_divider()
-
-    df = load_data()
-
-    st.download_button(
-        label="Download company comparison CSV",
-        data=df.to_csv(index=False),
-        file_name="company_comparison.csv",
-        mime="text/csv",
+    dynamic_tab, comparison_tab, scenario_tab, methodology_tab = st.tabs(
+        [
+            "Dynamic Ticker",
+            "Company Comparison",
+            "Scenario Analysis",
+            "Methodology",
+        ]
     )
 
-    st.subheader("Configured Company Dashboard")
+    with dynamic_tab:
+        show_dynamic_ticker_section()
 
-    tickers = sorted(df["ticker"].dropna().unique())
-    selected_ticker = st.selectbox("Select a company", tickers)
+    with comparison_tab:
+        df = load_data()
 
-    company_df = (
-        df[df["ticker"] == selected_ticker]
-        .sort_values("end")
-        .reset_index(drop=True)
-    )
+        st.download_button(
+            label="Download company comparison CSV",
+            data=df.to_csv(index=False),
+            file_name="company_comparison.csv",
+            mime="text/csv",
+        )
 
-    show_kpis(company_df)
+        st.subheader("Configured Company Dashboard")
 
-    col1, col2 = st.columns(2)
+        tickers = sorted(df["ticker"].dropna().unique())
+        selected_ticker = st.selectbox("Select a company", tickers)
 
-    with col1:
-        show_revenue_chart(company_df, selected_ticker)
+        company_df = (
+            df[df["ticker"] == selected_ticker]
+            .sort_values("end")
+            .reset_index(drop=True)
+        )
 
-    with col2:
-        show_margin_chart(company_df, selected_ticker)
+        show_kpis(company_df)
 
-    col3, col4 = st.columns(2)
+        col1, col2 = st.columns(2)
 
-    with col3:
-        show_cash_flow_chart(company_df, selected_ticker)
+        with col1:
+            show_revenue_chart(company_df, selected_ticker)
 
-    with col4:
-        show_working_capital_chart(company_df, selected_ticker)
+        with col2:
+            show_margin_chart(company_df, selected_ticker)
 
-    section_divider()
-    show_company_comparison(df)
+        col3, col4 = st.columns(2)
 
-    section_divider()
-    show_scenario_analysis()
+        with col3:
+            show_cash_flow_chart(company_df, selected_ticker)
 
-    section_divider()
-    show_methodology()
+        with col4:
+            show_working_capital_chart(company_df, selected_ticker)
 
+        section_divider()
+        show_company_comparison(df)
+
+    with scenario_tab:
+        show_scenario_analysis()
+
+    with methodology_tab:
+        show_methodology()
 
 if __name__ == "__main__":
     main()
