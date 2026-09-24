@@ -773,6 +773,64 @@ def show_working_capital_chart(company_df, selected_ticker):
             "not report all required SEC tags, usually accounts receivable."
         )
 
+def show_company_comparison_summary(df):
+    st.subheader("Company Comparison Summary")
+
+    latest_by_company = (
+        df.sort_values("end")
+        .groupby("ticker", as_index=False)
+        .tail(1)
+        .copy()
+    )
+
+    highest_revenue = latest_by_company.loc[
+        latest_by_company["revenue"].idxmax()
+    ]
+    highest_margin = latest_by_company.loc[
+        latest_by_company["operating_margin"].idxmax()
+    ]
+    highest_fcf = latest_by_company.loc[
+        latest_by_company["free_cash_flow"].idxmax()
+    ]
+
+    ccc_available = latest_by_company[latest_by_company["ccc"].notna()].copy()
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "Highest Revenue",
+        highest_revenue["ticker"],
+        format_billions(highest_revenue["revenue"]),
+    )
+
+    col2.metric(
+        "Highest Operating Margin",
+        highest_margin["ticker"],
+        format_percent(highest_margin["operating_margin"]),
+    )
+
+    col3.metric(
+        "Highest Free Cash Flow",
+        highest_fcf["ticker"],
+        format_billions(highest_fcf["free_cash_flow"]),
+    )
+
+    if not ccc_available.empty:
+        shortest_ccc = ccc_available.loc[ccc_available["ccc"].idxmin()]
+        col4.metric(
+            "Shortest CCC",
+            shortest_ccc["ticker"],
+            format_days(shortest_ccc["ccc"]),
+        )
+    else:
+        col4.metric("Shortest CCC", "N/A", "No full CCC data")
+
+    st.caption(
+        "These summary cards use the latest available fiscal year for each "
+        "configured company. Because fiscal year-end dates differ, compare them "
+        "as directional indicators rather than perfectly synchronized periods."
+    )
+
 def show_multi_company_metric_trend(df):
     st.subheader("Multi-Company Metric Trend")
 
@@ -987,6 +1045,10 @@ def main():
             .sort_values("end")
             .reset_index(drop=True)
         )
+
+        show_company_comparison_summary(df)
+
+        section_divider()
 
         show_kpis(company_df)
 
