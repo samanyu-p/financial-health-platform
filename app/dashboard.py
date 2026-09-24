@@ -1214,6 +1214,11 @@ def main():
 
         st.subheader("Configured Company Dashboard")
 
+        st.caption(
+            "Configured company data is loaded from the SQLite database when "
+            "available, with CSV output as a fallback."
+        )
+
         tickers = sorted(df["ticker"].dropna().unique())
         selected_ticker = st.selectbox("Select a company", tickers)
 
