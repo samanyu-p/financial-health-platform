@@ -1,3 +1,4 @@
+import re
 import sqlite3
 import subprocess
 import sys
@@ -604,6 +605,8 @@ def show_dynamic_scenarios(scenarios):
         "downside, base, and upside are assumption cases, not actual results."
     )
 
+def is_valid_ticker(ticker):
+    return bool(re.fullmatch(r"[A-Z]{1,5}", ticker))
 
 def show_dynamic_ticker_section():
     st.subheader("Analyze Any SEC Ticker")
@@ -618,8 +621,15 @@ def show_dynamic_ticker_section():
     analyze_clicked = st.button("Analyze ticker")
 
     if analyze_clicked and ticker_input:
-        st.session_state["dynamic_ticker_input"] = ticker_input
-        st.session_state["last_analyzed_ticker"] = ticker_input
+    if not is_valid_ticker(ticker_input):
+        st.error(
+            "Please enter a valid ticker using 1 to 5 letters, such as "
+            "AAPL, MSFT, JPM, WMT, COST, or TGT."
+        )
+        return
+
+    st.session_state["dynamic_ticker_input"] = ticker_input
+    st.session_state["last_analyzed_ticker"] = ticker_input
 
     ticker = st.session_state.get("last_analyzed_ticker")
 
