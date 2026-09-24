@@ -503,168 +503,176 @@ def show_dynamic_forecast(forecast, metrics):
 def show_dynamic_ticker_section():
     st.subheader("Analyze Any SEC Ticker")
 
-    ticker = st.text_input(
+    ticker_input = st.text_input(
         "Enter a ticker to analyze",
-        value="AAPL",
+        value=st.session_state.get("dynamic_ticker_input", "AAPL"),
         help="Examples: AAPL, MSFT, JPM, WMT, COST, TGT",
     )
 
+    ticker_input = ticker_input.upper().strip()
+
+    analyze_clicked = st.button("Analyze ticker")
+
+    if analyze_clicked and ticker_input:
+        st.session_state["dynamic_ticker_input"] = ticker_input
+        st.session_state["last_analyzed_ticker"] = ticker_input
+
+    ticker = st.session_state.get("last_analyzed_ticker")
+
     if not ticker:
+        st.info("Enter a ticker and click Analyze ticker to begin.")
         return
 
-    ticker = ticker.upper().strip()
+    profitability_export = None
+    fcf_export = None
+    working_capital_export = None
+    forecast_export = None
+    forecast_metrics = None
 
-    if st.button("Analyze ticker"):
-        profitability_export = None
-        fcf_export = None
-        working_capital_export = None
-        forecast_export = None
-        forecast_metrics = None
-
-        with st.spinner(f"Checking SEC data for {ticker}..."):
-            try:
-                support_result = cached_ticker_support(ticker)
-            except Exception as error:
-                st.error("Could not analyze this ticker.")
-                st.code(str(error))
-                return
-
-        if support_result is None:
-            st.error(f"Could not find SEC company data for ticker: {ticker}")
+    with st.spinner(f"Checking SEC data for {ticker}..."):
+        try:
+            support_result = cached_ticker_support(ticker)
+        except Exception as error:
+            st.error("Could not analyze this ticker.")
+            st.code(str(error))
             return
 
-        company = support_result["company"]
-        supported = support_result["supported_analyses"]
+    if support_result is None:
+        st.error(f"Could not find SEC company data for ticker: {ticker}")
+        return
 
-        try:
-            profitability_result = cached_dynamic_profitability(ticker)
-            if (
-                profitability_result is not None
-                and profitability_result["data"] is not None
-            ):
-                profitability_export = profitability_result["data"].copy()
-        except Exception as error:
-            profitability_result = {"data": None, "error": str(error)}
+    company = support_result["company"]
+    supported = support_result["supported_analyses"]
 
-        try:
-            fcf_result = cached_dynamic_free_cash_flow(ticker)
-            if fcf_result is not None and fcf_result["data"] is not None:
-                fcf_export = fcf_result["data"].copy()
-        except Exception as error:
-            fcf_result = {"data": None, "error": str(error)}
+    try:
+        profitability_result = cached_dynamic_profitability(ticker)
+        if (
+            profitability_result is not None
+            and profitability_result["data"] is not None
+        ):
+            profitability_export = profitability_result["data"].copy()
+    except Exception as error:
+        profitability_result = {"data": None, "error": str(error)}
 
-        try:
-            wc_result = cached_dynamic_working_capital(ticker)
-            if wc_result is not None and wc_result["data"] is not None:
-                working_capital_export = wc_result["data"].copy()
-        except Exception as error:
-            wc_result = {"data": None, "error": str(error)}
+    try:
+        fcf_result = cached_dynamic_free_cash_flow(ticker)
+        if fcf_result is not None and fcf_result["data"] is not None:
+            fcf_export = fcf_result["data"].copy()
+    except Exception as error:
+        fcf_result = {"data": None, "error": str(error)}
 
-        try:
-            forecast_result = cached_revenue_forecast(ticker)
-            forecast_export = forecast_result["forecast"].copy()
-            forecast_metrics = forecast_result["metrics"]
-        except Exception as error:
-            forecast_result = {"forecast": None, "metrics": None, "error": str(error)}
+    try:
+        wc_result = cached_dynamic_working_capital(ticker)
+        if wc_result is not None and wc_result["data"] is not None:
+            working_capital_export = wc_result["data"].copy()
+    except Exception as error:
+        wc_result = {"data": None, "error": str(error)}
 
-        st.write(f"**Company:** {company['name']}")
-        st.write(f"**Ticker:** {company['ticker']}")
-        st.write(f"**CIK:** {company['cik']}")
+    try:
+        forecast_result = cached_revenue_forecast(ticker)
+        forecast_export = forecast_result["forecast"].copy()
+        forecast_metrics = forecast_result["metrics"]
+    except Exception as error:
+        forecast_result = {"forecast": None, "metrics": None, "error": str(error)}
 
-        company_profile = support_result.get(
-            "company_profile",
+    st.write(f"**Company:** {company['name']}")
+    st.write(f"**Ticker:** {company['ticker']}")
+    st.write(f"**CIK:** {company['cik']}")
+
+    company_profile = support_result.get(
+        "company_profile",
+        {
+            "profile": "General SEC reporting company",
+            "fit": (
+                "Core revenue and profitability analysis may be available, "
+                "but industry-specific metrics depend on reported SEC tags."
+            ),
+            "interpretation": (
+                "This company can be analyzed using the SEC tags available "
+                "in its filings. Some metrics may be unavailable if the "
+                "company does not report the required data."
+            ),
+        },
+    )
+
+    st.info(
+        f"**Company Profile:** {company_profile['profile']}\n\n"
+        f"**Analysis Fit:** {company_profile['fit']}\n\n"
+        f"{company_profile['interpretation']}"
+    )
+
+    support_rows = []
+    for analysis_name, details in supported.items():
+        missing = details.get("missing_metrics", [])
+        support_rows.append(
             {
-                "profile": "General SEC reporting company",
-                "fit": (
-                    "Core revenue and profitability analysis may be available, "
-                    "but industry-specific metrics depend on reported SEC tags."
-                ),
-                "interpretation": (
-                    "This company can be analyzed using the SEC tags available "
-                    "in its filings. Some metrics may be unavailable if the "
-                    "company does not report the required data."
-                ),
-            },
+                "Analysis": analysis_name,
+                "Supported": "Yes" if details["is_supported"] else "No",
+                "Missing metrics": ", ".join(missing) if missing else "",
+            }
         )
 
+    st.dataframe(pd.DataFrame(support_rows), width="stretch", hide_index=True)
+
+    full_export = build_dynamic_export(
+        profitability_export,
+        fcf_export,
+        working_capital_export,
+        forecast_export,
+    )
+
+    if full_export is not None:
+        st.download_button(
+            label=f"Download full {ticker} analysis CSV",
+            data=full_export.to_csv(index=False),
+            file_name=f"{ticker.lower()}_full_analysis.csv",
+            mime="text/csv",
+        )
+
+    show_dynamic_key_takeaways(
+        ticker,
+        profitability_export,
+        fcf_export,
+        working_capital_export,
+    )
+
+    st.info(
+        "Different industries report different SEC tags. A bank may support "
+        "revenue and profitability analysis but not retail working-capital "
+        "metrics like inventory days or cash conversion cycle."
+    )
+
+    if profitability_export is not None:
+        show_dynamic_profitability(profitability_export)
+    else:
         st.info(
-            f"**Company Profile:** {company_profile['profile']}\n\n"
-            f"**Analysis Fit:** {company_profile['fit']}\n\n"
-            f"{company_profile['interpretation']}"
+            "Profitability analysis unavailable: "
+            + profitability_result.get("error", "Not available.")
         )
 
-        support_rows = []
-        for analysis_name, details in supported.items():
-            missing = details.get("missing_metrics", [])
-            support_rows.append(
-                {
-                    "Analysis": analysis_name,
-                    "Supported": "Yes" if details["is_supported"] else "No",
-                    "Missing metrics": ", ".join(missing) if missing else "",
-                }
-            )
-
-        st.dataframe(pd.DataFrame(support_rows), width="stretch", hide_index=True)
-
-        full_export = build_dynamic_export(
-            profitability_export,
-            fcf_export,
-            working_capital_export,
-            forecast_export,
-        )
-
-        if full_export is not None:
-            st.download_button(
-                label=f"Download full {ticker} analysis CSV",
-                data=full_export.to_csv(index=False),
-                file_name=f"{ticker.lower()}_full_analysis.csv",
-                mime="text/csv",
-            )
-
-        show_dynamic_key_takeaways(
-            ticker,
-            profitability_export,
-            fcf_export,
-            working_capital_export,
-        )
-
+    if fcf_export is not None:
+        show_dynamic_free_cash_flow(fcf_export)
+    else:
         st.info(
-            "Different industries report different SEC tags. A bank may support "
-            "revenue and profitability analysis but not retail working-capital "
-            "metrics like inventory days or cash conversion cycle."
+            "Free cash flow analysis unavailable: "
+            + fcf_result.get("error", "Not available.")
         )
 
-        if profitability_export is not None:
-            show_dynamic_profitability(profitability_export)
-        else:
-            st.info(
-                "Profitability analysis unavailable: "
-                + profitability_result.get("error", "Not available.")
-            )
+    if working_capital_export is not None:
+        show_dynamic_working_capital(working_capital_export)
+    else:
+        st.info(
+            "Working capital analysis unavailable: "
+            + wc_result.get("error", "Not available.")
+        )
 
-        if fcf_export is not None:
-            show_dynamic_free_cash_flow(fcf_export)
-        else:
-            st.info(
-                "Free cash flow analysis unavailable: "
-                + fcf_result.get("error", "Not available.")
-            )
-
-        if working_capital_export is not None:
-            show_dynamic_working_capital(working_capital_export)
-        else:
-            st.info(
-                "Working capital analysis unavailable: "
-                + wc_result.get("error", "Not available.")
-            )
-
-        if forecast_export is not None and forecast_metrics is not None:
-            show_dynamic_forecast(forecast_export, forecast_metrics)
-        else:
-            st.info(
-                "Revenue forecasting unavailable: "
-                + forecast_result.get("error", "Not available.")
-            )
+    if forecast_export is not None and forecast_metrics is not None:
+        show_dynamic_forecast(forecast_export, forecast_metrics)
+    else:
+        st.info(
+            "Revenue forecasting unavailable: "
+            + forecast_result.get("error", "Not available.")
+        )
 
 
 def show_kpis(company_df):
