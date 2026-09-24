@@ -1387,6 +1387,45 @@ def show_known_limitations():
     for limitation in limitations:
         st.write(f"- {limitation}")
 
+def show_interpretation_guide():
+    st.subheader("How to Interpret This Dashboard")
+
+    interpretation_rows = [
+        {
+            "Question": "Is the company growing?",
+            "Where to Look": "Revenue, revenue growth, revenue forecast",
+            "How to Read It": "Consistent revenue growth usually suggests expansion, but it should be checked against margins and cash flow.",
+        },
+        {
+            "Question": "Is the company becoming more profitable?",
+            "Where to Look": "Operating margin",
+            "How to Read It": "A rising operating margin means the company is keeping more profit from each dollar of revenue.",
+        },
+        {
+            "Question": "Is the company generating cash?",
+            "Where to Look": "Operating cash flow and free cash flow",
+            "How to Read It": "Positive free cash flow means cash remains after capital expenditures.",
+        },
+        {
+            "Question": "Is working capital efficient?",
+            "Where to Look": "DIO, DPO, DSO, and CCC",
+            "How to Read It": "Lower CCC usually means cash is tied up for less time, but this is most useful for inventory-heavy businesses.",
+        },
+        {
+            "Question": "Are the metrics appropriate for the company?",
+            "Where to Look": "Ticker support table and company profile",
+            "How to Read It": "If a metric is missing, the company may report differently or the metric may not fit its industry.",
+        },
+    ]
+
+    interpretation_df = pd.DataFrame(interpretation_rows)
+
+    st.dataframe(
+        interpretation_df,
+        width="stretch",
+        hide_index=True,
+    )
+
 def main():
     ensure_dashboard_data()
 
@@ -1469,6 +1508,7 @@ def main():
 
     with methodology_tab:
         show_methodology()
+        show_interpretation_guide()
         show_metric_dictionary()
         show_data_quality_summary(df)
         show_known_limitations()
