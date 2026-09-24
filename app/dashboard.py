@@ -1,3 +1,4 @@
+import sqlite3
 import subprocess
 import sys
 from pathlib import Path
@@ -60,9 +61,22 @@ def ensure_dashboard_data():
 
 @st.cache_data
 def load_data():
-    df = pd.read_csv(DATA_PATH)
+    ensure_dashboard_data()
+
+    database_path = Path("data/processed/financial_health.db")
+
+    if database_path.exists():
+        with sqlite3.connect(database_path) as connection:
+            df = pd.read_sql_query(
+                "SELECT * FROM financial_health",
+                connection,
+            )
+    else:
+        df = pd.read_csv(DATA_PATH)
+
     df["end"] = pd.to_datetime(df["end"])
     df["year"] = df["end"].dt.year
+
     return df
 
 
