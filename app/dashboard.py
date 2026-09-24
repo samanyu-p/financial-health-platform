@@ -1371,6 +1371,22 @@ def show_metric_dictionary():
         "for retailers but usually not appropriate for banks or insurers."
     )
 
+def show_known_limitations():
+    st.subheader("Known Limitations")
+
+    limitations = [
+        "SEC XBRL tags vary across companies and filing years.",
+        "Some companies report similar concepts using different tags.",
+        "Missing metrics do not always mean the business lacks that concept.",
+        "Working-capital metrics are most useful for inventory-heavy companies.",
+        "Cash conversion cycle should not be forced onto banks, insurers, or other companies where inventory is not meaningful.",
+        "Forecasts are simple baseline models and should not be treated as precise predictions.",
+        "Scenario analysis uses illustrative assumptions, not company guidance.",
+    ]
+
+    for limitation in limitations:
+        st.write(f"- {limitation}")
+
 def main():
     ensure_dashboard_data()
 
@@ -1455,6 +1471,7 @@ def main():
         show_methodology()
         show_metric_dictionary()
         show_data_quality_summary(df)
+        show_known_limitations()
 
 
 if __name__ == "__main__":
