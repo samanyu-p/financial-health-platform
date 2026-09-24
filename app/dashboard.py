@@ -127,11 +127,36 @@ def format_billions(value):
     return f"${value / 1e9:,.1f}B"
 
 
+def format_currency(value):
+    if pd.isna(value):
+        return "N/A"
+
+    value = float(value)
+
+    if abs(value) >= 1e12:
+        return f"${value / 1e12:.1f}T"
+
+    if abs(value) >= 1e9:
+        return f"${value / 1e9:.1f}B"
+
+    if abs(value) >= 1e6:
+        return f"${value / 1e6:.1f}M"
+
+    return f"${value:,.0f}"
+
+
 def format_percent(value):
     if pd.isna(value):
         return "N/A"
 
     return f"{value * 100:.1f}%"
+
+
+def format_number(value):
+    if pd.isna(value):
+        return "N/A"
+
+    return f"{value:.1f}"
 
 
 def format_days(value):
