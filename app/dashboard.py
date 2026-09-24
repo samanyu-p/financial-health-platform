@@ -1180,6 +1180,27 @@ def show_methodology():
     )
 
 
+def show_data_freshness():
+    processed_files = [
+        DATA_PATH,
+        Path("data/processed/financial_health.db"),
+    ]
+
+    existing_files = [path for path in processed_files if path.exists()]
+
+    if not existing_files:
+        st.caption("Data freshness: processed data files have not been generated yet.")
+        return
+
+    latest_modified_time = max(path.stat().st_mtime for path in existing_files)
+    latest_modified = pd.to_datetime(latest_modified_time, unit="s")
+
+    st.caption(
+        "Data freshness: configured company data was last generated or updated "
+        f"around {latest_modified.strftime('%Y-%m-%d %H:%M')}."
+    )
+
+
 def main():
     ensure_dashboard_data()
 
@@ -1189,6 +1210,7 @@ def main():
         "analysis, company comparison, forecasting, and business-model-aware "
         "metric guidance."
     )
+    show_data_freshness()
 
     dynamic_tab, comparison_tab, scenario_tab, methodology_tab = st.tabs(
         [
