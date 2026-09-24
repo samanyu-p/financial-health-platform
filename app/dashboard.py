@@ -712,6 +712,24 @@ def show_dynamic_ticker_section():
 
     st.dataframe(pd.DataFrame(support_rows), width="stretch", hide_index=True)
 
+    selected_tags = support_result.get("selected_tags", {})
+
+    tag_rows = []
+    for metric, tag in selected_tags.items():
+        tag_rows.append(
+            {
+                "Metric": metric,
+                "SEC tag used": tag if tag is not None else "Not available",
+            }
+        )
+
+    with st.expander("View SEC tags used for this analysis"):
+        st.dataframe(
+            pd.DataFrame(tag_rows),
+            width="stretch",
+            hide_index=True,
+        )
+
     full_export = build_dynamic_export(
         profitability_export,
         fcf_export,
