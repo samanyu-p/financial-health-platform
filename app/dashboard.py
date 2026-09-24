@@ -1291,6 +1291,30 @@ def show_data_freshness():
         f"around {latest_modified.strftime('%Y-%m-%d %H:%M')}."
     )
 
+def show_data_quality_summary(df):
+    st.subheader("Data Quality Summary")
+
+    summary = (
+        df.groupby("ticker")
+        .agg(
+            rows=("ticker", "count"),
+            first_year=("year", "min"),
+            latest_year=("year", "max"),
+            missing_dso=("dso", lambda values: values.isna().sum()),
+            missing_dio=("dio", lambda values: values.isna().sum()),
+            missing_dpo=("dpo", lambda values: values.isna().sum()),
+            missing_ccc=("ccc", lambda values: values.isna().sum()),
+        )
+        .reset_index()
+    )
+
+    st.dataframe(summary, width="stretch", hide_index=True)
+
+    st.info(
+        "Missing values are expected because SEC tags differ across companies. "
+        "For example, some companies do not report accounts receivable in a way "
+        "that supports full cash conversion cycle analysis."
+    )
 
 def main():
     ensure_dashboard_data()
@@ -1374,6 +1398,7 @@ def main():
 
     with methodology_tab:
         show_methodology()
+        show_data_quality_summary(df)
 
 
 if __name__ == "__main__":
