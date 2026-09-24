@@ -611,13 +611,7 @@ def is_valid_ticker(ticker):
 def show_dynamic_ticker_section():
     st.subheader("Analyze Any SEC Ticker")
 
-    ticker_input = st.text_input(
-        "Enter a ticker to analyze",
-        value=st.session_state.get("dynamic_ticker_input", "AAPL"),
-        help="Examples: AAPL, MSFT, JPM, WMT, COST, TGT",
-    )
-
-    ticker_input = ticker_input.upper().strip()
+        ticker_input = ticker_input.upper().strip()
     analyze_clicked = st.button("Analyze ticker")
 
     if analyze_clicked and ticker_input:
