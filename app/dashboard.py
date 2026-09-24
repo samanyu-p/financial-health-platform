@@ -74,6 +74,31 @@ def load_scenario_data():
     return scenario
 
 
+@st.cache_data(ttl=3600)
+def cached_ticker_support(ticker):
+    return analyze_ticker_support(ticker)
+
+
+@st.cache_data(ttl=3600)
+def cached_dynamic_profitability(ticker):
+    return analyze_dynamic_profitability(ticker)
+
+
+@st.cache_data(ttl=3600)
+def cached_dynamic_free_cash_flow(ticker):
+    return analyze_dynamic_free_cash_flow(ticker)
+
+
+@st.cache_data(ttl=3600)
+def cached_dynamic_working_capital(ticker):
+    return analyze_dynamic_working_capital(ticker)
+
+
+@st.cache_data(ttl=3600)
+def cached_revenue_forecast(ticker):
+    return forecast_revenue_for_ticker(ticker)
+
+
 def format_billions(value):
     if pd.isna(value):
         return "N/A"
@@ -498,7 +523,7 @@ def show_dynamic_ticker_section():
 
         with st.spinner(f"Checking SEC data for {ticker}..."):
             try:
-                support_result = analyze_ticker_support(ticker)
+                support_result = cached_ticker_support(ticker)
             except Exception as error:
                 st.error("Could not analyze this ticker.")
                 st.code(str(error))
@@ -512,7 +537,7 @@ def show_dynamic_ticker_section():
         supported = support_result["supported_analyses"]
 
         try:
-            profitability_result = analyze_dynamic_profitability(ticker)
+            profitability_result = cached_dynamic_profitability(ticker)
             if (
                 profitability_result is not None
                 and profitability_result["data"] is not None
@@ -522,21 +547,21 @@ def show_dynamic_ticker_section():
             profitability_result = {"data": None, "error": str(error)}
 
         try:
-            fcf_result = analyze_dynamic_free_cash_flow(ticker)
+            fcf_result = cached_dynamic_free_cash_flow(ticker)
             if fcf_result is not None and fcf_result["data"] is not None:
                 fcf_export = fcf_result["data"].copy()
         except Exception as error:
             fcf_result = {"data": None, "error": str(error)}
 
         try:
-            wc_result = analyze_dynamic_working_capital(ticker)
+            wc_result = cached_dynamic_working_capital(ticker)
             if wc_result is not None and wc_result["data"] is not None:
                 working_capital_export = wc_result["data"].copy()
         except Exception as error:
             wc_result = {"data": None, "error": str(error)}
 
         try:
-            forecast_result = forecast_revenue_for_ticker(ticker)
+            forecast_result = cached_revenue_forecast(ticker)
             forecast_export = forecast_result["forecast"].copy()
             forecast_metrics = forecast_result["metrics"]
         except Exception as error:
@@ -650,6 +675,61 @@ def show_kpis(company_df):
     col2.metric("Revenue Growth", format_percent(latest["revenue_growth"]))
     col3.metric("Operating Margin", format_percent(latest["operating_margin"]))
     col4.metric("Free Cash Flow", format_billions(latest["free_cash_flow"]))
+
+
+def show_company_comparison_summary(df):
+    st.subheader("Company Comparison Summary")
+
+    latest_by_company = (
+        df.sort_values("end")
+        .groupby("ticker", as_index=False)
+        .tail(1)
+        .copy()
+    )
+
+    highest_revenue = latest_by_company.loc[latest_by_company["revenue"].idxmax()]
+    highest_margin = latest_by_company.loc[
+        latest_by_company["operating_margin"].idxmax()
+    ]
+    highest_fcf = latest_by_company.loc[
+        latest_by_company["free_cash_flow"].idxmax()
+    ]
+
+    ccc_available = latest_by_company[latest_by_company["ccc"].notna()].copy()
+
+    col1, col2, col3, col4 = st.columns(4)
+
+    col1.metric(
+        "Highest Revenue",
+        highest_revenue["ticker"],
+        format_billions(highest_revenue["revenue"]),
+    )
+    col2.metric(
+        "Highest Operating Margin",
+        highest_margin["ticker"],
+        format_percent(highest_margin["operating_margin"]),
+    )
+    col3.metric(
+        "Highest Free Cash Flow",
+        highest_fcf["ticker"],
+        format_billions(highest_fcf["free_cash_flow"]),
+    )
+
+    if not ccc_available.empty:
+        shortest_ccc = ccc_available.loc[ccc_available["ccc"].idxmin()]
+        col4.metric(
+            "Shortest CCC",
+            shortest_ccc["ticker"],
+            format_days(shortest_ccc["ccc"]),
+        )
+    else:
+        col4.metric("Shortest CCC", "N/A", "No full CCC data")
+
+    st.caption(
+        "These summary cards use the latest available fiscal year for each "
+        "configured company. Because fiscal year-end dates differ, compare them "
+        "as directional indicators rather than perfectly synchronized periods."
+    )
 
 
 def show_revenue_chart(company_df, selected_ticker):
@@ -773,63 +853,6 @@ def show_working_capital_chart(company_df, selected_ticker):
             "not report all required SEC tags, usually accounts receivable."
         )
 
-def show_company_comparison_summary(df):
-    st.subheader("Company Comparison Summary")
-
-    latest_by_company = (
-        df.sort_values("end")
-        .groupby("ticker", as_index=False)
-        .tail(1)
-        .copy()
-    )
-
-    highest_revenue = latest_by_company.loc[
-        latest_by_company["revenue"].idxmax()
-    ]
-    highest_margin = latest_by_company.loc[
-        latest_by_company["operating_margin"].idxmax()
-    ]
-    highest_fcf = latest_by_company.loc[
-        latest_by_company["free_cash_flow"].idxmax()
-    ]
-
-    ccc_available = latest_by_company[latest_by_company["ccc"].notna()].copy()
-
-    col1, col2, col3, col4 = st.columns(4)
-
-    col1.metric(
-        "Highest Revenue",
-        highest_revenue["ticker"],
-        format_billions(highest_revenue["revenue"]),
-    )
-
-    col2.metric(
-        "Highest Operating Margin",
-        highest_margin["ticker"],
-        format_percent(highest_margin["operating_margin"]),
-    )
-
-    col3.metric(
-        "Highest Free Cash Flow",
-        highest_fcf["ticker"],
-        format_billions(highest_fcf["free_cash_flow"]),
-    )
-
-    if not ccc_available.empty:
-        shortest_ccc = ccc_available.loc[ccc_available["ccc"].idxmin()]
-        col4.metric(
-            "Shortest CCC",
-            shortest_ccc["ticker"],
-            format_days(shortest_ccc["ccc"]),
-        )
-    else:
-        col4.metric("Shortest CCC", "N/A", "No full CCC data")
-
-    st.caption(
-        "These summary cards use the latest available fiscal year for each "
-        "configured company. Because fiscal year-end dates differ, compare them "
-        "as directional indicators rather than perfectly synchronized periods."
-    )
 
 def show_multi_company_metric_trend(df):
     st.subheader("Multi-Company Metric Trend")
@@ -848,7 +871,6 @@ def show_multi_company_metric_trend(df):
         "Select a metric to compare",
         list(metric_options.keys()),
     )
-
     selected_metric = metric_options[selected_metric_label]
 
     chart_df = df.copy()
@@ -883,6 +905,7 @@ def show_multi_company_metric_trend(df):
         "tag availability. Missing values are left blank instead of forcing a "
         "misleading comparison."
     )
+
 
 def show_company_comparison(df):
     st.subheader("Company Comparison")
@@ -1079,6 +1102,7 @@ def main():
 
     with methodology_tab:
         show_methodology()
+
 
 if __name__ == "__main__":
     main()
