@@ -511,6 +511,13 @@ def show_dynamic_scenarios(scenarios):
 
     scenario_df = scenarios.copy()
 
+    st.download_button(
+        label="Download dynamic scenario CSV",
+        data=scenario_df.to_csv(index=False),
+        file_name="dynamic_scenario_analysis.csv",
+        mime="text/csv",
+    )
+
     display = scenario_df.copy()
 
     dollar_columns = [
@@ -579,7 +586,8 @@ def show_dynamic_scenarios(scenarios):
 
     st.caption(
         "Scenarios are simple illustrative cases based on recent historical "
-        "averages. They are not company guidance or investment advice."
+        "averages. They are separate from the full historical export because "
+        "downside, base, and upside are assumption cases, not actual results."
     )
 
 
